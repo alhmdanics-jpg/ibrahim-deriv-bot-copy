@@ -30,6 +30,13 @@ export default Engine =>
                     broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
 
                     if (this.isSold) {
+    if (Array.isArray(this.contractIds) && this.contractIds.length === 2) {
+        const allSold = this.contractIds.every(id => this.contractStates?.[id]?.is_sold);
+
+        if (!allSold) {
+            return;
+        }
+    }
                         this.contractId = '';
                         clearTimeout(this.transaction_recovery_timeout);
                         this.updateTotals(contract);
