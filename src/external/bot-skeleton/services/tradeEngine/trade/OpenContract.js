@@ -52,7 +52,17 @@ export default Engine =>
 
                         this.store.dispatch(sell());
                     } else {
-                        this.store.dispatch(openContractReceived());
+    if (Array.isArray(this.contractIds) && this.contractIds.length === 2) {
+        const allContractsReceived = this.contractIds.every(
+            id => this.contractStates?.[id]
+        );
+
+        if (allContractsReceived) {
+            this.store.dispatch(openContractReceived());
+        }
+    } else {
+        this.store.dispatch(openContractReceived());
+    }
                     }
                 }
             });
