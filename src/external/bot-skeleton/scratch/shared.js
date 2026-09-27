@@ -1,6 +1,6 @@
 import filesaver from 'file-saver';
 import { config } from '../constants/config';
-
+import { localize } from '@deriv-com/translations';
 export const saveAs = ({ data, filename, type }) => {
     const blob = new Blob([data], { type });
     filesaver.saveAs(blob, filename);
@@ -20,5 +20,8 @@ export const getContractTypeOptions = (contract_type, trade_type) => {
         return contract_options.filter(option => option[1] === contract_type);
     }
 
-    return contract_options;
+    return [
+    ...contract_options,
+    [localize('Both'), 'both'],
+];
 };
