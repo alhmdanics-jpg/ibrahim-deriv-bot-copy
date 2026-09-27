@@ -41,11 +41,15 @@ if (this.store.getState().scope !== BEFORE_PURCHASE) {
 
                                 if (this.isBothPurchase) {
                     this.contractIds.push(buy.contract_id);
-                    this.contractId = this.contractIds[0];
 
-                    if (this.contractIds.length === 2) {
-                        this.store.dispatch(purchaseSuccessful());
-                    }
+if (this.contractIds.length === 1) {
+    this.contractId = buy.contract_id;
+}
+
+if (this.contractIds.length === 2) {
+    this.contractId = this.contractIds[0];
+    this.store.dispatch(purchaseSuccessful());
+}
                 } else {
                     this.contractId = buy.contract_id;
                     this.store.dispatch(purchaseSuccessful());
