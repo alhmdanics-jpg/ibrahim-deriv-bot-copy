@@ -12,16 +12,36 @@ export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
                         if (contract_type === 'both') {
-                const contract_types = this.options?.contractTypes || [];
+    const contract_types = this.options?.contractTypes || [];
 
-                if (contract_types.length !== 2) {
-                    return Promise.reject(new Error('Both requires two contract types'));
-                }
+    if (contract_types.length !== 2) {
+        return Promise.reject(new Error('Both requires two contract types'));
+    }
 
-                this.isBothPurchase = true;
-                this.contractIds = [];
+    this.isBothPurchase = true;
+    this.contractIds = [];
 
-                return Promise.all(contract_types.map(type => this.purchase(type)));
+    const purchases = contract_types.map(type => {
+        const trade_option = tradeOptionToBuy(type, this.tradeOptions);
+
+        return doUntilDone(() => api_base.api.send(trade_option));
+    });
+
+    return Promise.all(purchases).then(results => {
+        results.forEach(response => {
+            if (response?.buy?.contract_id) {
+                this.contractIds.push(response.buy.contract_id);
+            }
+        });
+
+        if (this.contractIds.length === 2) {
+            this.contractId = this.contractIds[0];
+        }
+
+        this.store.dispatch(purchaseSuccessful());
+
+        return results;
+    });
                         }
             // Prevent calling purchase twice
 
