@@ -11,7 +11,19 @@ let purchase_reference;
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
-            // Prevent calling purchase twic
+                        if (contract_type === 'both') {
+                const contract_types = this.options?.contractTypes || [];
+
+                if (contract_types.length !== 2) {
+                    return Promise.reject(new Error('Both requires two contract types'));
+                }
+
+                this.isBothPurchase = true;
+                this.contractIds = [];
+
+                return Promise.all(contract_types.map(type => this.purchase(type)));
+                        }
+            // Prevent calling purchase twice
 
 if (this.store.getState().scope !== BEFORE_PURCHASE) {
     return Promise.resolve();
@@ -27,8 +39,17 @@ if (this.store.getState().scope !== BEFORE_PURCHASE) {
                     buy,
                 });
 
-                this.contractId = buy.contract_id;
-                this.store.dispatch(purchaseSuccessful());
+                                if (this.isBothPurchase) {
+                    this.contractIds.push(buy.contract_id);
+                    this.contractId = this.contractIds[0];
+
+                    if (this.contractIds.length === 2) {
+                        this.store.dispatch(purchaseSuccessful());
+                    }
+                } else {
+                    this.contractId = buy.contract_id;
+                    this.store.dispatch(purchaseSuccessful());
+                                }
 
                 if (this.is_proposal_subscription_required) {
                     this.renewProposalsOnPurchase();
