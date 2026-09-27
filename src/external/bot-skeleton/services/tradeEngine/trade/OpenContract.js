@@ -19,6 +19,14 @@ export default Engine =>
 
                     this.data.contract = contract;
 
+                                        if (Array.isArray(this.contractIds) && this.contractIds.length > 0) {
+                        if (!this.contractStates) {
+                            this.contractStates = {};
+                        }
+
+                        this.contractStates[contract.contract_id] = contract;
+                                        }
+
                     broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
 
                     if (this.isSold) {
