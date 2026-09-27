@@ -47,7 +47,7 @@ export default Engine =>
 
 if (this.store.getState().scope !== BEFORE_PURCHASE) {
     return Promise.resolve();
-}                                                                       }
+}                                                                       
 
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
