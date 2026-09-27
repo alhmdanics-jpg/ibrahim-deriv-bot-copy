@@ -12,9 +12,32 @@ export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
             // Prevent calling purchase twice
-            if (this.store.getState().scope !== BEFORE_PURCHASE) {
-                return Promise.resolve();
-            }
+            if (contract_type === 'both') {
+    const contract_types = this.options?.contractTypes || [];
+
+    if (contract_types.length !== 2) {
+        return Promise.reject(new Error('Both requires two contract types'));
+    }
+
+    if (this.store.getState().scope !== BEFORE_PURCHASE) {
+        return Promise.resolve();
+    }
+
+    this.isBothPurchase = true;
+    this.contractIds = [];
+
+    return Promise.all(contract_types.map(type => this.purchase(type))).then(results => {
+        this.contractIds = results
+            .map(result => result?.buy?.contract_id)
+            .filter(Boolean);
+
+        return results;
+    });
+}
+
+if (this.store.getState().scope !== BEFORE_PURCHASE) {
+    return Promise.resolve();
+                                                                             }
 
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
@@ -42,6 +65,7 @@ export default Engine =>
                     contract_type,
                     buy_price: buy.buy_price,
                 });
+                return response;
             };
 
             if (this.is_proposal_subscription_required) {
