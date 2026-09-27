@@ -59,10 +59,14 @@ export default Engine =>
             this.hasEntryTick = Boolean(entry_tick);
         }
 
-        expectedContractId(contractId) {
-            return this.contractId && contractId === this.contractId;
-        }
+         expectedContractId(contractId) {
+    if (Array.isArray(this.contractIds) && this.contractIds.length > 0) {
+        return this.contractIds.includes(contractId);
+    }
 
+    return this.contractId && contractId === this.contractId;
+         }
+        
         getSellPrice() {
             const { bid_price: bidPrice, buy_price: buyPrice, currency } = this.data.contract;
             return getRoundedNumber(Number(bidPrice) - Number(buyPrice), currency);
