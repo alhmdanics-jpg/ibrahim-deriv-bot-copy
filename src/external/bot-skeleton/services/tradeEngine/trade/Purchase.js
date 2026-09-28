@@ -11,45 +11,66 @@ let purchase_reference;
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
-                        if (contract_type === 'both') {
-    const contract_types = this.options?.contractTypes || [];
-
-    if (contract_types.length !== 2) {
-        return Promise.reject(new Error('Both requires two contract types'));
+    // Prevent calling purchase twice
+    if (this.store.getState().scope !== BEFORE_PURCHASE) {
+        return Promise.resolve();
     }
 
-    this.isBothPurchase = true;
     this.contractIds = [];
+    this.contractStates = {};
 
-    const purchases = contract_types.map(type => {
-        const trade_option = tradeOptionToBuy(type, this.tradeOptions);
+    // Purchase both opposite contracts concurrently
+    if (contract_type === 'both') {
+        const contract_types = this.options?.contractTypes || [];
 
-        return doUntilDone(() => api_base.api.send(trade_option));
-    });
-
-    return Promise.all(purchases).then(results => {
-        results.forEach(response => {
-            if (response?.buy?.contract_id) {
-                this.contractIds.push(response.buy.contract_id);
-            }
-        });
-
-        if (this.contractIds.length === 2) {
-            this.contractId = this.contractIds[0];
+        if (contract_types.length !== 2) {
+            return Promise.reject(new Error('Both requires two contract types'));
         }
 
-        this.store.dispatch(purchaseSuccessful());
+        this.isSold = false;
 
-        return results;
-    });
-                        }
-            // Prevent calling purchase twice
+        const purchases = contract_types.map(type => {
+            const trade_option = tradeOptionToBuy(type, this.tradeOptions);
 
-if (this.store.getState().scope !== BEFORE_PURCHASE) {
-    return Promise.resolve();
-}                                                                       
+            return doUntilDone(() => api_base.api.send(trade_option)).then(response => {
+                if (response?.buy?.contract_id) {
+                    this.contractIds.push(response.buy.contract_id);
+                }
 
-            const onSuccess = response => {
+                return response;
+            });
+        });
+
+        return Promise.all(purchases).then(results => {
+            if (this.contractIds.length !== 2) {
+                return Promise.reject(new Error('Both purchase did not return two contracts'));
+            }
+
+            this.contractId = this.contractIds[0];
+
+            results.forEach(response => {
+                const { buy } = response;
+
+                contractStatus({
+                    id: 'contract.purchase_received',
+                    data: buy.transaction_id,
+                    buy,
+                });
+
+                log(LogTypes.PURCHASE, {
+                    longcode: buy.longcode,
+                    transaction_id: buy.transaction_id,
+                });
+            });
+
+            delayIndex = 0;
+            this.store.dispatch(purchaseSuccessful());
+
+            return results;
+        });
+    }
+
+    const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
                 const { buy } = response;
 
@@ -59,21 +80,8 @@ if (this.store.getState().scope !== BEFORE_PURCHASE) {
                     buy,
                 });
 
-                                if (this.isBothPurchase) {
-                    this.contractIds.push(buy.contract_id);
-
-if (this.contractIds.length === 1) {
-    this.contractId = buy.contract_id;
-}
-
-if (this.contractIds.length === 2) {
-    this.contractId = this.contractIds[0];
-    this.store.dispatch(purchaseSuccessful());
-}
-                } else {
-                    this.contractId = buy.contract_id;
-                    this.store.dispatch(purchaseSuccessful());
-                                }
+                 this.contractId = buy.contract_id;
+this.store.dispatch(purchaseSuccessful());               
 
                 if (this.is_proposal_subscription_required) {
                     this.renewProposalsOnPurchase();
