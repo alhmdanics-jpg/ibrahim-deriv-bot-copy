@@ -153,15 +153,19 @@ export const generateOAuthURL = () => {
 
     const valid_server_urls = ['green.derivws.com', 'red.derivws.com', 'blue.derivws.com', 'canary.derivws.com'];
 
-    if (
+    // Render deployment: always use Deriv OAuth endpoint
+    if (hostname === 'ibrahim-deriv-bot-copy.onrender.com') {
+        original_url.hostname = 'oauth.deriv.com';
+        if (!original_url.pathname.startsWith('/oauth2/authorize')) {
+            original_url.pathname = '/oauth2/authorize';
+        }
+    } else if (
         configured_server_url &&
         (typeof configured_server_url === 'string'
             ? !valid_server_urls.includes(configured_server_url)
             : !valid_server_urls.includes(JSON.stringify(configured_server_url)))
     ) {
         original_url.hostname = configured_server_url;
-    } else if (hostname === 'ibrahim-deriv-bot-copy.onrender.com') {
-        original_url.hostname = 'oauth.deriv.com';
     } else if (original_url.hostname.includes('oauth.deriv.')) {
         if (hostname.includes('.deriv.me')) {
             original_url.hostname = 'oauth.deriv.me';
@@ -169,6 +173,7 @@ export const generateOAuthURL = () => {
             original_url.hostname = 'oauth.deriv.be';
         } else {
             const current_domain = getCurrentProductionDomain();
+
             if (current_domain) {
                 const domain_suffix = current_domain.replace(/^[^.]+\./, '');
                 original_url.hostname = `oauth.${domain_suffix}`;
