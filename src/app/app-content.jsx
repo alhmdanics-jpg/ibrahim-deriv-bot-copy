@@ -204,57 +204,65 @@ const AppContent = observer(() => {
     };
 
     const changeActiveSymbolLoadingState = () => {
-        init();
+    init();
 
-        const retrieveActiveSymbols = () => {
-            const { active_symbols } = ApiHelpers.instance;
+    const retrieveActiveSymbols = async () => {
+        const { active_symbols } = ApiHelpers.instance;
 
-            // Handle offline scenario
-            if (!isOnline) {
-                console.log('[Offline] Skipping active symbols retrieval, showing dashboard');
+        if (!isOnline) {
+            console.log('[Offline] Skipping active symbols retrieval, showing dashboard');
+            setIsLoading(false);
+            return;
+        }
+
+        let loading_finished = false;
+
+        const finishLoading = () => {
+            if (!loading_finished) {
+                loading_finished = true;
                 setIsLoading(false);
-                return;
             }
-
-            active_symbols
-                .retrieveActiveSymbols(true)
-                .then(() => {
-                    setIsLoading(false);
-                })
-                .catch(error => {
-                    console.error('[API] Failed to retrieve active symbols:', error);
-                    // Don't stay in loading state if API fails
-                    setIsLoading(false);
-                });
         };
 
-        if (ApiHelpers?.instance?.active_symbols) {
-            retrieveActiveSymbols();
-        } else {
-            // This is a workaround to fix the issue where the active symbols are not loaded immediately
-            // when the API is initialized. Should be replaced with RxJS pubsub
-            const intervalId = setInterval(() => {
-                if (ApiHelpers?.instance?.active_symbols) {
-                    clearInterval(intervalId);
-                    retrieveActiveSymbols();
-                } else if (!isOnline) {
-                    // If offline, don't wait indefinitely
-                    clearInterval(intervalId);
-                    console.log('[Offline] Stopping active symbols wait, showing dashboard');
-                    setIsLoading(false);
-                }
-            }, 1000);
+        const timeout_id = setTimeout(() => {
+            console.log('[Timeout] Active symbols loading timeout, showing dashboard');
+            finishLoading();
+        }, 10000);
 
-            // Set a maximum timeout to prevent infinite loading
-            setTimeout(() => {
-                clearInterval(intervalId);
-                if (is_loading) {
-                    console.log('[Timeout] Active symbols loading timeout, showing dashboard');
-                    setIsLoading(false);
-                }
-            }, 10000); // 10 second timeout
+        try {
+            await active_symbols.retrieveActiveSymbols(true);
+        } catch (error) {
+            console.error('[API] Failed to retrieve active symbols:', error);
+        } finally {
+            clearTimeout(timeout_id);
+            finishLoading();
         }
     };
+
+    if (ApiHelpers?.instance?.active_symbols) {
+        retrieveActiveSymbols();
+    } else {
+        const intervalId = setInterval(() => {
+            if (ApiHelpers?.instance?.active_symbols) {
+                clearInterval(intervalId);
+                retrieveActiveSymbols();
+            } else if (!isOnline) {
+                clearInterval(intervalId);
+                console.log('[Offline] Stopping active symbols wait, showing dashboard');
+                setIsLoading(false);
+            }
+        }, 1000);
+
+        setTimeout(() => {
+            clearInterval(intervalId);
+
+            if (is_loading) {
+                console.log('[Timeout] Active symbols instance not available, showing dashboard');
+                setIsLoading(false);
+            }
+        }, 10000);
+    }
+};
 
     React.useEffect(() => {
         if (is_api_initialized) {
