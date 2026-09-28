@@ -1,7 +1,7 @@
 import { loginUrl } from '@/components/shared/utils/login/login';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Cookies from 'js-cookie';
-import { generateOAuthURL } from '@/components/shared';
+
 import { removeCookies } from '@/components/shared/utils/storage/storage';
 import { api_base } from '@/external/bot-skeleton';
 import { setAuthData } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
