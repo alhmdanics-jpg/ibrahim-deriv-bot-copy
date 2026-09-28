@@ -267,7 +267,7 @@ const AppContent = observer(() => {
     React.useEffect(() => {
         if (is_api_initialized) {
             init();
-            setIsLoading(true);
+            setIsLoading(false);
             if (!client.is_logged_in) {
                 changeActiveSymbolLoadingState();
             }
