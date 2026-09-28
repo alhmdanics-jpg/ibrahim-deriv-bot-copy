@@ -70,19 +70,31 @@ const AppContent = observer(() => {
     useIntercom(token);
 
     useEffect(() => {
-        if (connectionStatus === CONNECTION_STATUS.OPENED) {
-            setIsApiInitialized(true);
-            common.setSocketOpened(true);
-            // Clear offline timeout if connection is restored
-            if (offline_timeout) {
-                clearTimeout(offline_timeout);
-                setOfflineTimeout(null);
-            }
-        } else if (connectionStatus !== CONNECTION_STATUS.OPENED) {
-            common.setSocketOpened(false);
-        }
-    }, [common, connectionStatus, offline_timeout]);
+    let initialization_timeout;
 
+    if (connectionStatus === CONNECTION_STATUS.OPENED) {
+        setIsApiInitialized(true);
+        common.setSocketOpened(true);
+
+        if (offline_timeout) {
+            clearTimeout(offline_timeout);
+            setOfflineTimeout(null);
+        }
+    } else {
+        common.setSocketOpened(false);
+
+        initialization_timeout = setTimeout(() => {
+            setIsApiInitialized(true);
+        }, 10000);
+    }
+
+    return () => {
+        if (initialization_timeout) {
+            clearTimeout(initialization_timeout);
+        }
+    };
+}, [common, connectionStatus, offline_timeout]);
+    
     // Handle offline scenarios - don't wait indefinitely for API
     useEffect(() => {
         if (!isOnline && is_loading) {
