@@ -1,9 +1,6 @@
 import { website_name } from '@/utils/site-config';
-import { domain_app_ids, getAppId, getCurrentProductionDomain } from '../config/config';
 import { CookieStorage, isStorageSupported, LocalStore } from '../storage/storage';
-import { getStaticUrl, urlForCurrentDomain } from '../url';
-import { deriv_urls } from '../url/constants';
-
+import { getStaticUrl } from '../url';
 export const redirectToLogin = (is_logged_in: boolean, language: string, has_params = true, redirect_delay = 0) => {
     if (!is_logged_in && isStorageSupported(sessionStorage)) {
         const l = window.location;
