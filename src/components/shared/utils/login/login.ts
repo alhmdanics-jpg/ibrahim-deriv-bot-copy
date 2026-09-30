@@ -21,31 +21,64 @@ type TLoginUrl = {
     language: string;
 };
 
-export const loginUrl = ({ language }: TLoginUrl) => {
-    const server_url = LocalStore.get('config.server_url');
+const OAUTH_CLIENT_ID = '34sjwoq60WXtuzTmSvXN';
+
+const generateRandomString = (length = 64) => {
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+};
+
+const generateCodeChallenge = async (verifier: string) => {
+    const data = new TextEncoder().encode(verifier);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
+export const loginUrl = async ({ language }: TLoginUrl) => {
     const signup_device_cookie = new (CookieStorage as any)('signup_device');
     const signup_device = signup_device_cookie.get('signup_device');
+
     const date_first_contact_cookie = new (CookieStorage as any)('date_first_contact');
     const date_first_contact = date_first_contact_cookie.get('date_first_contact');
+
     const marketing_queries = `${signup_device ? `&signup_device=${signup_device}` : ''}${
         date_first_contact ? `&date_first_contact=${date_first_contact}` : ''
     }`;
-    const getOAuthUrl = () => {
-        const current_domain = getCurrentProductionDomain();
-        let oauth_domain = deriv_urls.DERIV_HOST_NAME;
 
-        if (current_domain) {
-            // Extract domain suffix (e.g., 'deriv.me' from 'dbot.deriv.me')
-            const domain_suffix = current_domain.replace(/^[^.]+\./, '');
-            oauth_domain = domain_suffix;
-        }
+    const state = generateRandomString(32);
+    const code_verifier = generateRandomString(64);
+    const code_challenge = await generateCodeChallenge(code_verifier);
 
-        const url = `https://oauth.${oauth_domain}/oauth2/authorize?app_id=${getAppId()}&l=${language}${marketing_queries}&brand=${website_name.toLowerCase()}`;
-        return url;
-    };
+    const redirect_uri = `${window.location.origin}/callback`;
 
-    if (server_url && /qa/.test(server_url)) {
-        return `https://${server_url}/oauth2/authorize?app_id=${getAppId()}&l=${language}${marketing_queries}&brand=${website_name.toLowerCase()}`;
+    sessionStorage.setItem('oauth_state', state);
+    sessionStorage.setItem('oauth_code_verifier', code_verifier);
+    sessionStorage.setItem('oauth_redirect_uri', redirect_uri);
+
+    const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: OAUTH_CLIENT_ID,
+        redirect_uri,
+        scope: 'trade',
+        state,
+        code_challenge,
+        code_challenge_method: 'S256',
+        l: language,
+        brand: website_name.toLowerCase(),
+    });
+
+    if (signup_device) {
+        params.set('signup_device', signup_device);
     }
-     return getOAuthUrl();
-    };
+
+    if (date_first_contact) {
+        params.set('date_first_contact', date_first_contact);
+    }
+
+    return `https://auth.deriv.com/oauth2/auth?${params.toString()}`;
+};
