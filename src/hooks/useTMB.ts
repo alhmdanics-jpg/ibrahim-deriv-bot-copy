@@ -383,11 +383,11 @@ const useTMB = (): UseTMBReturn => {
                         setIsAuthenticating(false);
                     }
                     try {
-                        window.location.replace(
-    loginUrl({
-        language: new URLSearchParams(window.location.search).get('lang') || 'EN',
-    })
-);
+                       const oauth_url = await loginUrl({
+    language: new URLSearchParams(window.location.search).get('lang') || 'EN',
+});
+
+window.location.replace(oauth_url); 
                     } catch (error) {
                         console.error('Failed to redirect to OAuth:', error);
                         if (setIsAuthenticating) {
