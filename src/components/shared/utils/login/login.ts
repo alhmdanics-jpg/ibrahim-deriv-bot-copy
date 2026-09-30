@@ -21,7 +21,7 @@ type TLoginUrl = {
     language: string;
 };
 
-const OAUTH_CLIENT_ID = '34sjwoq60WXtuzTmSvXN';
+const OAUTH_CLIENT_ID = '34sjwoq60wWXtuzTmSvxN';
 
 const generateRandomString = (length = 64) => {
     const array = new Uint8Array(length);
