@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@deriv-com/ui';
+import { generateDerivApiInstance } from '@/external/bot-skeleton/services/api/appId';
 
 const CALLBACK_ENDPOINT = '/oauth/token';
 
@@ -9,6 +10,8 @@ const CallbackPage = () => {
 
     useEffect(() => {
         const exchangeCode = async () => {
+            let api: any = null;
+
             try {
                 const params = new URLSearchParams(window.location.search);
 
@@ -53,24 +56,99 @@ const CallbackPage = () => {
                     throw new Error(result.error || 'OAuth token exchange failed.');
                 }
 
-                localStorage.setItem('authToken', result.access_token);
+                const access_token = result.access_token;
 
-                if (result.loginid) {
-                    localStorage.setItem('active_loginid', result.loginid);
+                localStorage.setItem('authToken', access_token);
+
+                api = await generateDerivApiInstance();
+
+                if (!api) {
+                    throw new Error('Unable to initialize Deriv API.');
                 }
 
-                if (result.accounts) {
-                    localStorage.setItem('accountsList', JSON.stringify(result.accounts));
+                const authorize_response = await api.authorize(access_token);
+
+                if (authorize_response?.error) {
+                    throw new Error(
+                        authorize_response.error.message || 'Deriv authorization failed.'
+                    );
                 }
+
+                const authorize = authorize_response?.authorize;
+
+                if (!authorize) {
+                    throw new Error('Deriv authorization response is missing.');
+                }
+
+                const account_list = authorize.account_list || [];
+
+                if (account_list.length === 0) {
+                    throw new Error('No Deriv accounts were returned.');
+                }
+
+                const accountsList: Record<string, string> = {};
+                const clientAccounts: Record<string, any> = {};
+
+                account_list.forEach((account: any) => {
+                    if (!account.loginid) return;
+
+                    accountsList[account.loginid] = access_token;
+
+                    clientAccounts[account.loginid] = {
+                        loginid: account.loginid,
+                        token: access_token,
+                        currency: account.currency || '',
+                        is_virtual: account.is_virtual ?? false,
+                    };
+                });
+
+                const firstAccount = account_list[0];
+
+                localStorage.setItem(
+                    'accountsList',
+                    JSON.stringify(accountsList)
+                );
+
+                localStorage.setItem(
+                    'clientAccounts',
+                    JSON.stringify(clientAccounts)
+                );
+
+                localStorage.setItem(
+                    'active_loginid',
+                    firstAccount.loginid
+                );
+
+                localStorage.setItem(
+                    'callback_token',
+                    access_token
+                );
 
                 sessionStorage.removeItem('oauth_state');
                 sessionStorage.removeItem('oauth_code_verifier');
                 sessionStorage.removeItem('oauth_redirect_uri');
 
-                window.location.replace(`${window.location.origin}/bot/`);
+                if (api?.disconnect) {
+                    api.disconnect();
+                }
+
+                const currency = firstAccount.currency || 'USD';
+
+                window.location.replace(
+                    `${window.location.origin}/bot/?account=${encodeURIComponent(currency)}`
+                );
             } catch (err) {
                 console.error('[OAuth Callback]', err);
-                setError(err instanceof Error ? err.message : 'OAuth login failed.');
+
+                if (api?.disconnect) {
+                    api.disconnect();
+                }
+
+                setError(
+                    err instanceof Error
+                        ? err.message
+                        : 'OAuth login failed.'
+                );
             } finally {
                 setLoading(false);
             }
