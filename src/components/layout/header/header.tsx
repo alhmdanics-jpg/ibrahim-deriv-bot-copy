@@ -137,32 +137,32 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
             return (
                 <div className='auth-actions'>
                     <Button
-                        tertiary
-                        onClick={async () => {
-                            clearAuthData(false);
-                            const getQueryParams = new URLSearchParams(window.location.search);
-                            const currency = getQueryParams.get('account') ?? '';
-                            const query_param_currency =
-                                currency || sessionStorage.getItem('query_param_currency') || 'USD';
+    tertiary
+    onClick={async () => {
+        clearAuthData(false);
 
-                            try {
-                                // First, explicitly wait for TMB status to be determined
-                                const tmbEnabled = await isTmbEnabled();
-                                // Now use the result of the explicit check
-                                if (tmbEnabled) {
-                                    await onRenderTMBCheck(true); // Pass true to indicate it's from login button
-                                } else {
-                                    // Always use OIDC if TMB is not enabled
-                            
-                                        const oauth_url = await loginUrl({
-    language: new URLSearchParams(window.location.search).get('lang') || 'EN',
-});
+        try {
+            const tmbEnabled = await isTmbEnabled();
 
-window.location.replace(oauth_url);
+            if (tmbEnabled) {
+                await onRenderTMBCheck(true);
+            } else {
+                const oauth_url = await loginUrl({
+                    language:
+                        new URLSearchParams(window.location.search).get('lang') || 'EN',
+                });
+
+                window.location.replace(oauth_url);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }}
+>
+    <Localize i18n_default_text='Log in' />
+</Button>
                                 
-                    >
-                        <Localize i18n_default_text='Log in' />
-                    </Button>
+                    
                     <Button
                         primary
                         onClick={() => {
