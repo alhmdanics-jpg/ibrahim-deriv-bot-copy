@@ -153,13 +153,13 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
                                     await onRenderTMBCheck(true); // Pass true to indicate it's from login button
                                 } else {
                                     // Always use OIDC if TMB is not enabled
-                                    try {
+                            
                                         const oauth_url = await loginUrl({
     language: new URLSearchParams(window.location.search).get('lang') || 'EN',
 });
 
 window.location.replace(oauth_url);
-                                    } 
+                                
                     >
                         <Localize i18n_default_text='Log in' />
                     </Button>
