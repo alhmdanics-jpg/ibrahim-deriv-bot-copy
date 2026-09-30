@@ -4,7 +4,7 @@ const path = require('path');
 
 const PORT = process.env.PORT || 10000;
 
-const CLIENT_ID = '34sjwoq60WXtuzTmSvXN';
+const CLIENT_ID = '34sjwoq60wWXtuzTmSvxN';
 
 const DIST_DIR = path.join(__dirname, 'dist');
 
