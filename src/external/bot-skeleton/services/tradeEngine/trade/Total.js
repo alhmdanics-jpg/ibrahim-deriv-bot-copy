@@ -69,6 +69,10 @@ export default Engine =>
             log(win ? LogTypes.PROFIT : LogTypes.LOST, { currency, profit });
         }
 
+        updateTotalsForContracts(contracts) {
+            contracts.forEach(contract => this.updateTotals(contract));
+        }
+
         updateAndReturnTotalRuns() {
             this.sessionRuns++;
             const accountStat = this.getAccountStat();

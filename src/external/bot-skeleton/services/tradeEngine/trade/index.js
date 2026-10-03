@@ -119,10 +119,19 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
             // event, wait a couple seconds for the API to give us the correct "proposal_open_contract"
             // response, if there's none after x seconds. Send an explicit request, which _should_
             // solve the issue. This is a backup!
-            const subscription = api_base.api.onMessage().subscribe(({ data }) => {
+            api_base.subscribeToMessages(({ data }) => {
                 if (data.msg_type === 'transaction' && data.transaction.action === 'sell') {
                     this.transaction_recovery_timeout = setTimeout(() => {
                         const { contract } = this.data;
+                        if (this.isBothPurchase && this.contractStates?.[data.transaction.contract_id]?.status === 'open') {
+                            doUntilDone(() => {
+                                api_base.api.send({
+                                    proposal_open_contract: 1,
+                                    contract_id: data.transaction.contract_id,
+                                });
+                            }, ['PriceMoved']);
+                            return;
+                        }
                         const is_same_contract = contract.contract_id === data.transaction.contract_id;
                         const is_open_contract = contract.status === 'open';
                         if (is_same_contract && is_open_contract) {
@@ -134,7 +143,6 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
                 }
                 resolve();
             });
-            api_base.pushSubscription(subscription);
         });
     }
 

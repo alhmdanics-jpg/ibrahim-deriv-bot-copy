@@ -93,7 +93,7 @@ export default Engine =>
 
         observeProposals() {
             if (!api_base.api) return;
-            const subscription = api_base.api.onMessage().subscribe(response => {
+            api_base.subscribeToMessages(response => {
                 if (response.data.msg_type === 'proposal') {
                     const { passthrough, proposal } = response.data;
                     if (proposal && this.data.proposals.findIndex(p => p.id === proposal.id) === -1) {
@@ -103,7 +103,6 @@ export default Engine =>
                     }
                 }
             });
-            api_base.pushSubscription(subscription);
         }
 
         checkProposalReady() {

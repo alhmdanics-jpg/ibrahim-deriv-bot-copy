@@ -18,7 +18,6 @@ declare global {
 
 type UseTMBReturn = {
     handleLogout: () => void;
-    isOAuth2Enabled: boolean;
     is_tmb_enabled: boolean;
     onRenderTMBCheck: (fromLoginButton?: boolean, setIsAuthenticating?: (value: boolean) => void) => Promise<void>;
     isTmbEnabled: () => Promise<boolean>;
@@ -59,8 +58,6 @@ const useTMB = (): UseTMBReturn => {
     const currentDomain = useMemo(() => window.location.hostname.split('.').slice(-2).join('.'), []);
 
     const is_staging = useMemo(() => window.location.hostname.includes('staging'), []);
-    const is_production = useMemo(() => !is_staging, [is_staging]);
-    const isOAuth2Enabled = useMemo(() => is_production || is_staging, [is_production, is_staging]);
     const [is_tmb_enabled, setIsTmbEnabled] = useState(false);
     const [, setIsApiInitialized] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
@@ -475,7 +472,6 @@ window.location.replace(oauth_url);
     return useMemo(
         () => ({
             handleLogout,
-            isOAuth2Enabled,
             is_tmb_enabled,
             onRenderTMBCheck,
             isTmbEnabled,
@@ -484,7 +480,6 @@ window.location.replace(oauth_url);
         }),
         [
             handleLogout,
-            isOAuth2Enabled,
             is_tmb_enabled,
             onRenderTMBCheck,
             isTmbEnabled,

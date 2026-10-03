@@ -7,7 +7,7 @@ export default Engine =>
     class OpenContract extends Engine {
         observeOpenContract() {
             if (!api_base.api) return;
-            const subscription = api_base.api.onMessage().subscribe(({ data }) => {
+            api_base.subscribeToMessages(({ data }) => {
                 if (data.msg_type === 'proposal_open_contract') {
                     const contract = data.proposal_open_contract;
 
@@ -19,24 +19,16 @@ export default Engine =>
 
                     this.data.contract = contract;
 
-                                        if (Array.isArray(this.contractIds) && this.contractIds.length > 0) {
-                        if (!this.contractStates) {
-                            this.contractStates = {};
-                        }
-
+                    if (this.isBothPurchase && Array.isArray(this.contractIds) && this.contractIds.length > 0) {
                         this.contractStates[contract.contract_id] = contract;
-                                        }
+                        broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
+                        this.checkBothContracts();
+                        return;
+                    }
 
                     broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
 
                     if (this.isSold) {
-    if (Array.isArray(this.contractIds) && this.contractIds.length === 2) {
-        const allSold = this.contractIds.every(id => this.contractStates?.[id]?.is_sold);
-
-        if (!allSold) {
-            return;
-        }
-    }
                         this.contractId = '';
                         clearTimeout(this.transaction_recovery_timeout);
                         this.updateTotals(contract);
@@ -52,27 +44,46 @@ export default Engine =>
 
                         this.store.dispatch(sell());
                     } else {
-    if (Array.isArray(this.contractIds) && this.contractIds.length === 2) {
-        const allContractsReceived = this.contractIds.every(
-            id => this.contractStates?.[id]
-        );
-
-        if (allContractsReceived) {
-            this.store.dispatch(openContractReceived());
-        }
-    } else {
-        this.store.dispatch(openContractReceived());
-    }
+                        this.store.dispatch(openContractReceived());
                     }
                 }
             });
-            api_base.pushSubscription(subscription);
         }
 
         waitForAfter() {
             return new Promise(resolve => {
                 this.afterPromise = resolve;
             });
+        }
+
+        checkBothContracts() {
+            if (!this.isBothPurchase || !this.bothPurchasesSettled || !this.contractIds?.length) return;
+
+            const allContractsReceived = this.contractIds.every(id => this.contractStates[id]);
+            if (allContractsReceived && !this.bothOpenDispatched) {
+                this.bothOpenDispatched = true;
+                this.store.dispatch(openContractReceived());
+            }
+
+            const allSold = this.contractIds.every(id => this.contractStates[id]?.is_sold);
+            if (allSold && !this.bothResultProcessed) {
+                this.bothResultProcessed = true;
+                this.contractId = '';
+                clearTimeout(this.transaction_recovery_timeout);
+
+                const settledContracts = this.contractIds.map(id => this.contractStates[id]);
+                this.updateTotalsForContracts(settledContracts);
+                settledContracts.forEach(settledContract => {
+                    contractStatus({
+                        id: 'contract.sold',
+                        data: settledContract.transaction_ids?.sell,
+                        contract: settledContract,
+                    });
+                });
+
+                if (this.afterPromise) this.afterPromise();
+                this.store.dispatch(sell());
+            }
         }
 
         setContractFlags(contract) {
@@ -84,13 +95,13 @@ export default Engine =>
             this.hasEntryTick = Boolean(entry_tick);
         }
 
-         expectedContractId(contractId) {
-    if (Array.isArray(this.contractIds) && this.contractIds.length > 0) {
-        return this.contractIds.includes(contractId);
-    }
+        expectedContractId(contractId) {
+            if (this.isBothPurchase && Array.isArray(this.contractIds) && this.contractIds.length > 0) {
+                return this.contractIds.includes(contractId);
+            }
 
-    return this.contractId && contractId === this.contractId;
-         }
+            return this.contractId && contractId === this.contractId;
+        }
         
         getSellPrice() {
             const { bid_price: bidPrice, buy_price: buyPrice, currency } = this.data.contract;

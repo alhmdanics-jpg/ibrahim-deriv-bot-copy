@@ -1,5 +1,6 @@
 import { website_name } from '@/utils/site-config';
-import { CookieStorage, isStorageSupported, LocalStore } from '../storage/storage';
+import { CookieStorage, isStorageSupported } from '../storage/storage';
+import { getAppId } from '../config/config';
 import { getStaticUrl } from '../url';
 export const redirectToLogin = (is_logged_in: boolean, language: string, has_params = true, redirect_delay = 0) => {
     if (!is_logged_in && isStorageSupported(sessionStorage)) {
@@ -46,23 +47,23 @@ export const loginUrl = async ({ language }: TLoginUrl) => {
     const date_first_contact_cookie = new (CookieStorage as any)('date_first_contact');
     const date_first_contact = date_first_contact_cookie.get('date_first_contact');
 
-    const marketing_queries = `${signup_device ? `&signup_device=${signup_device}` : ''}${
-        date_first_contact ? `&date_first_contact=${date_first_contact}` : ''
-    }`;
-
     const state = generateRandomString(32);
     const code_verifier = generateRandomString(64);
     const code_challenge = await generateCodeChallenge(code_verifier);
 
     const redirect_uri = `${window.location.origin}/callback`;
+    const account = new URLSearchParams(window.location.search).get('account') ||
+        sessionStorage.getItem('query_param_currency') || '';
 
     sessionStorage.setItem('oauth_state', state);
     sessionStorage.setItem('oauth_code_verifier', code_verifier);
     sessionStorage.setItem('oauth_redirect_uri', redirect_uri);
+    sessionStorage.setItem('oauth_account', account);
 
     const params = new URLSearchParams({
         response_type: 'code',
         client_id: OAUTH_CLIENT_ID,
+        app_id: String(getAppId()),
         redirect_uri,
         scope: 'trade',
         state,

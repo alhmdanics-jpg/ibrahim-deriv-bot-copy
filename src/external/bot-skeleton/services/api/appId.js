@@ -9,6 +9,9 @@ export const generateDerivApiInstance = () => {
     const cleanedAppId = getAppId()?.replace?.(/[^a-zA-Z0-9]/g, '') ?? getAppId();
     const socket_url = `wss://${cleanedServer}/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
     const deriv_socket = new WebSocket(socket_url);
+    deriv_socket.addEventListener('open', () => console.info('[OAuthTrace] WebSocket open'));
+    deriv_socket.addEventListener('error', () => console.info('[OAuthTrace] WebSocket error'));
+    deriv_socket.addEventListener('close', () => console.info('[OAuthTrace] WebSocket close'));
     const deriv_api = new DerivAPIBasic({
         connection: deriv_socket,
         middleware: new APIMiddleware({}),
@@ -23,7 +26,24 @@ export const getLoginId = () => {
 };
 
 export const V2GetActiveToken = () => {
-    const token = localStorage.getItem('authToken');
+    const active_loginid = localStorage.getItem('active_loginid');
+    let token = localStorage.getItem('authToken');
+
+    try {
+        const accounts = JSON.parse(localStorage.getItem('accountsList') || '{}');
+        if (active_loginid && accounts?.[active_loginid]) {
+            token = accounts[active_loginid];
+        }
+    } catch (error) {
+        console.error('Unable to read active Deriv account token:', error);
+    }
+
+    const expiresAt = Number(localStorage.getItem('authTokenExpiresAt'));
+    const oauthToken = localStorage.getItem('callback_token');
+    if (token && token === oauthToken && expiresAt && Date.now() >= expiresAt) {
+        return null;
+    }
+
     if (token && token !== 'null') return token;
     return null;
 };
@@ -32,8 +52,18 @@ export const V2GetActiveClientId = () => {
     const token = V2GetActiveToken();
 
     if (!token) return null;
-    const account_list = JSON.parse(localStorage.getItem('accountsList'));
+    let account_list;
+    try {
+        account_list = JSON.parse(localStorage.getItem('accountsList') || '{}');
+    } catch (error) {
+        console.error('Unable to read Deriv accounts:', error);
+        return null;
+    }
     if (account_list && account_list !== 'null') {
+        const active_loginid = getLoginId();
+        if (active_loginid && account_list[active_loginid] === token) {
+            return active_loginid;
+        }
         const active_clientId = Object.keys(account_list).find(key => account_list[key] === token);
         return active_clientId;
     }

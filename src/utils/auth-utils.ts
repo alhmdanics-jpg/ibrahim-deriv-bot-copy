@@ -22,6 +22,7 @@ export const clearAuthData = (is_reload: boolean = true): void => {
     localStorage.removeItem('clientAccounts');
     localStorage.removeItem('callback_token');
     localStorage.removeItem('authToken');
+    localStorage.removeItem('authTokenExpiresAt');
     localStorage.removeItem('active_loginid');
     localStorage.removeItem('client.accounts');
     localStorage.removeItem('client.country');
@@ -41,6 +42,8 @@ export const handleOidcAuthFailure = (error: any): void => {
 
     // Clear auth data
     localStorage.removeItem('authToken');
+    localStorage.removeItem('callback_token');
+    localStorage.removeItem('authTokenExpiresAt');
     localStorage.removeItem('active_loginid');
     localStorage.removeItem('clientAccounts');
     localStorage.removeItem('accountsList');

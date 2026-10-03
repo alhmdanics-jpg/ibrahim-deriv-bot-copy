@@ -11,64 +11,93 @@ let purchase_reference;
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
-    // Prevent calling purchase twice
-    if (this.store.getState().scope !== BEFORE_PURCHASE) {
-        return Promise.resolve();
-    }
-
-    this.contractIds = [];
-    this.contractStates = {};
-
-    // Purchase both opposite contracts concurrently
-    if (contract_type === 'both') {
-        const contract_types = this.options?.contractTypes || [];
-
-        if (contract_types.length !== 2) {
-            return Promise.reject(new Error('Both requires two contract types'));
-        }
-
-        this.isSold = false;
-
-        const purchases = contract_types.map(type => {
-            const trade_option = tradeOptionToBuy(type, this.tradeOptions);
-
-            return doUntilDone(() => api_base.api.send(trade_option)).then(response => {
-                if (response?.buy?.contract_id) {
-                    this.contractIds.push(response.buy.contract_id);
-                }
-
-                return response;
-            });
-        });
-
-        return Promise.all(purchases).then(results => {
-            if (this.contractIds.length !== 2) {
-                return Promise.reject(new Error('Both purchase did not return two contracts'));
+            // Prevent calling purchase twice.
+            if (this.store.getState().scope !== BEFORE_PURCHASE) {
+                return Promise.resolve();
             }
 
-            this.contractId = this.contractIds[0];
+            this.contractIds = [];
+            this.contractStates = {};
+            this.contractsByType = {};
+            this.isBothPurchase = contract_type === 'both';
 
-            results.forEach(response => {
-                const { buy } = response;
+            if (this.isBothPurchase) {
+                const contract_types = this.options?.contractTypes || [];
+                if (contract_types.length !== 2 || new Set(contract_types).size !== 2) {
+                    return Promise.reject(new Error('Both requires two distinct contract types'));
+                }
 
-                contractStatus({
-                    id: 'contract.purchase_received',
-                    data: buy.transaction_id,
-                    buy,
+                this.isSold = false;
+                this.contractId = '';
+                this.bothResultProcessed = false;
+                this.bothOpenDispatched = false;
+                this.bothPurchasesSettled = false;
+                contractStatus({ id: 'contract.purchase_sent', data: this.tradeOptions.amount });
+
+                // Start both requests in this same execution turn; independent API requests
+                // cannot guarantee an identical market entry spot.
+                const purchases = contract_types.map(type => {
+                    const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
+                    const trade_option = proposal ? null : tradeOptionToBuy(type, this.tradeOptions);
+                    const action = () =>
+                        proposal
+                            ? api_base.api.send({ buy: proposal.id, price: proposal.askPrice })
+                            : api_base.api.send(trade_option);
+
+                    return doUntilDone(action).then(response => {
+                        const buy = response?.buy;
+                        if (buy?.contract_id) {
+                            this.contractsByType[type] = {
+                                contract_id: buy.contract_id,
+                                contract_type: type,
+                                buy,
+                            };
+                            this.contractIds.push(buy.contract_id);
+                        }
+                        return { type, response };
+                    });
                 });
 
-                log(LogTypes.PURCHASE, {
-                    longcode: buy.longcode,
-                    transaction_id: buy.transaction_id,
+                return Promise.allSettled(purchases).then(settled => {
+                    const failures = settled.filter(result => result.status === 'rejected');
+                    const successes = settled.filter(result => result.status === 'fulfilled');
+
+                    successes.forEach(result => {
+                        const { type, response } = result.value;
+                        const buy = response?.buy;
+                        if (!buy?.contract_id) {
+                            failures.push({ status: 'rejected', reason: new Error(`${type} buy response has no contract_id`) });
+                            return;
+                        }
+
+                        contractStatus({ id: 'contract.purchase_received', data: buy.transaction_id, buy });
+                        log(LogTypes.PURCHASE, { longcode: buy.longcode, transaction_id: buy.transaction_id });
+                    });
+
+                    if (this.contractIds.length === 0) {
+                        const error = failures[0]?.reason || new Error('Both purchase failed');
+                        this.$scope?.observer?.emit('Error', error?.error || error);
+                        return Promise.reject(error);
+                    }
+
+                    this.bothPurchasesSettled = true;
+                    this.updateAndReturnTotalRuns();
+                    delayIndex = 0;
+                    this.store.dispatch(purchaseSuccessful());
+                    this.checkBothContracts();
+
+                    failures.forEach(result => {
+                        const error = result.reason?.error || result.reason;
+                        // eslint-disable-next-line no-console
+                        console.error('[Both] One contract purchase failed:', error);
+                        this.$scope?.observer?.emit('Error', error);
+                    });
+
+                    return successes.map(result => result.value.response);
                 });
-            });
+            }
 
-            delayIndex = 0;
-            this.store.dispatch(purchaseSuccessful());
-
-            return results;
-        });
-    }
+            this.isBothPurchase = false;
 
     const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.

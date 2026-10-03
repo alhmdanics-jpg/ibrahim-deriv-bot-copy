@@ -8,6 +8,12 @@ import { DURING_PURCHASE } from './state/constants';
 export default Engine =>
     class Sell extends Engine {
         isSellAtMarketAvailable() {
+            if (this.isBothPurchase) {
+                return Object.values(this.contractsByType || {}).some(({ contract_id }) => {
+                    const contract = this.contractStates?.[contract_id];
+                    return contract && !contract.is_sold && contract.is_valid_to_sell && !contract.is_expired;
+                });
+            }
             return this.contractId && !this.isSold && this.isSellAvailable && !this.isExpired;
         }
 
@@ -22,6 +28,10 @@ export default Engine =>
             if (!this.isSellAtMarketAvailable()) {
                 log(LogTypes.NOT_OFFERED);
                 return Promise.resolve();
+            }
+
+            if (this.isBothPurchase) {
+                return this.sellBothAtMarket();
             }
 
             let delay_index = 1;
@@ -115,6 +125,58 @@ export default Engine =>
                     errors_to_ignore,
                     delay_index++
                 ).then(sell_response => onContractSold(sell_response));
+            });
+        }
+
+        sellBothAtMarket() {
+            const sellableContracts = Object.values(this.contractsByType || {}).filter(({ contract_id }) => {
+                const contract = this.contractStates?.[contract_id];
+                return contract && !contract.is_sold && contract.is_valid_to_sell && !contract.is_expired;
+            });
+
+            if (sellableContracts.length === 0) {
+                log(LogTypes.NOT_OFFERED);
+                return Promise.resolve([]);
+            }
+
+            this.waitForAfter();
+
+            const sellRequests = sellableContracts.map(({ contract_id, contract_type }) =>
+                doUntilDone(() => api_base.api.send({ sell: contract_id, price: 0 }))
+                    .then(response =>
+                        doUntilDone(() => api_base.api.send({ proposal_open_contract: 1, contract_id })).then(
+                            () => response
+                        )
+                    )
+                    .catch(error => {
+                        if (error?.error?.code === 'InvalidOfferings') return undefined;
+
+                        return doUntilDone(() =>
+                            api_base.api.send({ proposal_open_contract: 1, contract_id })
+                        ).then(({ proposal_open_contract }) => {
+                            if (!proposal_open_contract?.is_sold) return Promise.reject(error);
+                            return { sell: { sold_for: proposal_open_contract.sell_price } };
+                        });
+                    })
+                    .then(response => {
+                        if (response?.sell) {
+                            log(LogTypes.SELL, { sold_for: response.sell.sold_for, contract_type });
+                        }
+                        return { contract_id, contract_type, response };
+                    })
+            );
+
+            return Promise.allSettled(sellRequests).then(results => {
+                results.forEach(result => {
+                    if (result.status === 'rejected') {
+                        const error = result.reason?.error || result.reason;
+                        // eslint-disable-next-line no-console
+                        console.error('[Both] Contract sell failed:', error);
+                        this.$scope?.observer?.emit('Error', error);
+                    }
+                });
+                // OpenContract completes the round only after every purchased leg is settled.
+                return results;
             });
         }
     };

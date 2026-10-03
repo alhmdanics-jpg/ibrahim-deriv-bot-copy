@@ -8,8 +8,8 @@ import { api_base } from '@/external/bot-skeleton';
 import { useOfflineDetection } from '@/hooks/useOfflineDetection';
 import { useStore } from '@/hooks/useStore';
 import useTMB from '@/hooks/useTMB';
-import { handleOidcAuthFailure, isDemoAccount } from '@/utils/auth-utils';
-import { requestOidcAuthentication } from '@deriv-com/auth-client';
+import { loginUrl } from '@/components/shared/utils/login/login';
+import { isDemoAccount } from '@/utils/auth-utils';
 import { useDevice } from '@deriv-com/ui';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '../shared';
 import Footer from './footer';
@@ -174,21 +174,10 @@ const Layout = observer(() => {
                     if (query_param_currency) {
                         sessionStorage.setItem('query_param_currency', query_param_currency);
                     }
-                    try {
-                        await requestOidcAuthentication({
-                            redirectCallbackUri: `${window.location.origin}/callback`,
-                            ...(query_param_currency
-                                ? {
-                                      state: {
-                                          account: query_param_currency,
-                                      },
-                                  }
-                                : {}),
-                        });
-                    } catch (err) {
-                        setIsAuthenticating(false);
-                        handleOidcAuthFailure(err);
-                    }
+                    const oauth_url = await loginUrl({
+                        language: new URLSearchParams(window.location.search).get('lang') || 'EN',
+                    });
+                    window.location.replace(oauth_url);
                 }
             } catch (err) {
                 // eslint-disable-next-line no-console

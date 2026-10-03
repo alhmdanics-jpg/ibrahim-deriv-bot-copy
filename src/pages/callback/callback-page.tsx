@@ -3,6 +3,30 @@ import { Button } from '@deriv-com/ui';
 import { generateDerivApiInstance } from '@/external/bot-skeleton/services/api/appId';
 
 const CALLBACK_ENDPOINT = '/oauth/token';
+const DIAGNOSTIC_TIMEOUT_MS = 30_000;
+
+const logOAuthTrace = (event: string, details: Record<string, unknown> = {}) => {
+    console.info(`[OAuthTrace] ${event}`, details);
+};
+
+const withDiagnosticTimeout = <T,>(promise: Promise<T>, stage: string) =>
+    new Promise<T>((resolve, reject) => {
+        const timeoutId = window.setTimeout(
+            () => reject(new Error(`${stage} timed out after ${DIAGNOSTIC_TIMEOUT_MS / 1000} seconds.`)),
+            DIAGNOSTIC_TIMEOUT_MS
+        );
+
+        promise.then(
+            value => {
+                window.clearTimeout(timeoutId);
+                resolve(value);
+            },
+            error => {
+                window.clearTimeout(timeoutId);
+                reject(error);
+            }
+        );
+    });
 
 const CallbackPage = () => {
     const [error, setError] = useState<string>('');
@@ -11,9 +35,15 @@ const CallbackPage = () => {
     useEffect(() => {
         const exchangeCode = async () => {
             let api: any = null;
+            logOAuthTrace('callback.start');
 
             try {
                 const params = new URLSearchParams(window.location.search);
+
+                const oauthError = params.get('error');
+                if (oauthError) {
+                    throw new Error(params.get('error_description') || `Deriv OAuth failed: ${oauthError}`);
+                }
 
                 const code = params.get('code');
                 const state = params.get('state');
@@ -38,7 +68,9 @@ const CallbackPage = () => {
                     throw new Error('OAuth redirect URI is missing.');
                 }
 
-                const response = await fetch(CALLBACK_ENDPOINT, {
+                logOAuthTrace('token_request.start');
+                const tokenRequestStartedAt = Date.now();
+                const response = await withDiagnosticTimeout(fetch(CALLBACK_ENDPOINT, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -48,25 +80,39 @@ const CallbackPage = () => {
                         code_verifier: codeVerifier,
                         redirect_uri: redirectUri,
                     }),
+                }), 'OAuth token request');
+                logOAuthTrace('token_response.received', {
+                    status: response.status,
+                    duration_ms: Date.now() - tokenRequestStartedAt,
                 });
 
-                const result = await response.json();
+                const result = await withDiagnosticTimeout(response.json(), 'OAuth token response parsing');
+                logOAuthTrace('token_json.parsed', { has_access_token: Boolean(result?.access_token) });
 
                 if (!response.ok || !result.access_token) {
-                    throw new Error(result.error || 'OAuth token exchange failed.');
+                    const exchangeError =
+                        (typeof result.error === 'string' && result.error) ||
+                        result.error_description ||
+                        result.error?.message ||
+                        'OAuth token exchange failed.';
+                    throw new Error(exchangeError);
                 }
 
                 const access_token = result.access_token;
 
-                localStorage.setItem('authToken', access_token);
-
-                api = await generateDerivApiInstance();
+                api = generateDerivApiInstance();
+                logOAuthTrace('api_instance.created');
 
                 if (!api) {
                     throw new Error('Unable to initialize Deriv API.');
                 }
 
-                const authorize_response = await api.authorize(access_token);
+                logOAuthTrace('authorize.start');
+                const authorize_response = await withDiagnosticTimeout(
+                    api.authorize(access_token),
+                    'Deriv authorize request'
+                );
+                logOAuthTrace('authorize.resolved');
 
                 if (authorize_response?.error) {
                     throw new Error(
@@ -92,17 +138,41 @@ const CallbackPage = () => {
                 account_list.forEach((account: any) => {
                     if (!account.loginid) return;
 
-                    accountsList[account.loginid] = access_token;
+                    const accountToken = account.token || access_token;
+                    accountsList[account.loginid] = accountToken;
 
                     clientAccounts[account.loginid] = {
                         loginid: account.loginid,
-                        token: access_token,
+                        token: accountToken,
                         currency: account.currency || '',
                         is_virtual: account.is_virtual ?? false,
                     };
                 });
 
-                const firstAccount = account_list[0];
+                const requestedAccount = sessionStorage.getItem('oauth_account') || '';
+                const requestedIsDemo = requestedAccount.toLowerCase() === 'demo';
+                const matchingRequestedAccount = requestedIsDemo
+                    ? account_list.find((account: any) => account.is_virtual || account.loginid?.startsWith('VR'))
+                    : account_list.find(
+                          (account: any) =>
+                              !account.is_virtual &&
+                              account.currency?.toUpperCase() === requestedAccount.toUpperCase()
+                      );
+                const authorizedAccount = account_list.find(
+                    (account: any) => account.loginid === authorize.loginid
+                );
+                const activeAccount =
+                    matchingRequestedAccount || authorizedAccount || (account_list.length === 1 ? account_list[0] : null);
+
+                if (!activeAccount?.loginid) {
+                    throw new Error('Unable to determine an active Deriv account.');
+                }
+
+                localStorage.setItem('authToken', access_token);
+                localStorage.setItem(
+                    'authTokenExpiresAt',
+                    String(Date.now() + Number(result.expires_in || 3600) * 1000)
+                );
 
                 localStorage.setItem(
                     'accountsList',
@@ -116,7 +186,7 @@ const CallbackPage = () => {
 
                 localStorage.setItem(
                     'active_loginid',
-                    firstAccount.loginid
+                    activeAccount.loginid
                 );
 
                 localStorage.setItem(
@@ -127,18 +197,26 @@ const CallbackPage = () => {
                 sessionStorage.removeItem('oauth_state');
                 sessionStorage.removeItem('oauth_code_verifier');
                 sessionStorage.removeItem('oauth_redirect_uri');
+                sessionStorage.removeItem('oauth_account');
 
                 if (api?.disconnect) {
                     api.disconnect();
                 }
 
-                const currency = firstAccount.currency || 'USD';
+                const accountParam = activeAccount.is_virtual || activeAccount.loginid.startsWith('VR')
+                    ? 'demo'
+                    : activeAccount.currency || 'USD';
 
                 window.location.replace(
-                    `${window.location.origin}/bot/?account=${encodeURIComponent(currency)}`
+                    `${window.location.origin}/?account=${encodeURIComponent(accountParam)}`
                 );
             } catch (err) {
                 console.error('[OAuth Callback]', err);
+
+                sessionStorage.removeItem('oauth_state');
+                sessionStorage.removeItem('oauth_code_verifier');
+                sessionStorage.removeItem('oauth_redirect_uri');
+                sessionStorage.removeItem('oauth_account');
 
                 if (api?.disconnect) {
                     api.disconnect();

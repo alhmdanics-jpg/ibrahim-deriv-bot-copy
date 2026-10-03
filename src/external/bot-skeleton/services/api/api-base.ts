@@ -25,6 +25,9 @@ type SubscriptionPromise = Promise<{
     subscription: CurrentSubscription;
 }>;
 
+type ApiMessage = any;
+type ApiMessageListener = (message: ApiMessage) => void;
+
 type TApiBaseApi = {
     connection: {
         readyState: keyof typeof socket_state;
@@ -50,6 +53,7 @@ class APIBase {
     account_info = {};
     is_running = false;
     subscriptions: CurrentSubscription[] = [];
+    messageListeners = new Set<ApiMessageListener>();
     time_interval: ReturnType<typeof setInterval> | null = null;
     has_active_symbols = false;
     is_stopping = false;
@@ -73,14 +77,14 @@ class APIBase {
         this.current_auth_subscriptions = [];
     };
 
-    onsocketopen() {
+    onsocketopen = () => {
         setConnectionStatus(CONNECTION_STATUS.OPENED);
-    }
+    };
 
-    onsocketclose() {
+    onsocketclose = () => {
         setConnectionStatus(CONNECTION_STATUS.CLOSED);
         this.reconnectIfNotConnected();
-    }
+    };
 
     async init(force_create_connection = false) {
         this.toggleRunButton(true);
@@ -93,14 +97,20 @@ class APIBase {
             if (this.api?.connection) {
                 ApiHelpers.disposeInstance();
                 setConnectionStatus(CONNECTION_STATUS.CLOSED);
+                this.subscriptions.forEach(subscription => subscription.unsubscribe());
+                this.subscriptions = [];
+                this.api.connection.removeEventListener('open', this.onsocketopen);
+                this.api.connection.removeEventListener('close', this.onsocketclose);
                 this.api.disconnect();
-                this.api.connection.removeEventListener('open', this.onsocketopen.bind(this));
-                this.api.connection.removeEventListener('close', this.onsocketclose.bind(this));
             }
 
             this.api = generateDerivApiInstance();
-            this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
-            this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
+            this.api?.connection.addEventListener('open', this.onsocketopen);
+            this.api?.connection.addEventListener('close', this.onsocketclose);
+            this.messageListeners.forEach(listener => {
+                const subscription = this.api?.onMessage().subscribe(listener);
+                if (subscription) this.subscriptions.push(subscription);
+            });
         }
 
         if (!this.has_active_symbols && !V2GetActiveToken()) {
@@ -273,9 +283,17 @@ class APIBase {
         this.subscriptions.push(subscription);
     }
 
+    subscribeToMessages(listener: ApiMessageListener) {
+        this.messageListeners.add(listener);
+        const subscription = this.api?.onMessage().subscribe(listener);
+        if (subscription) this.subscriptions.push(subscription);
+        return subscription;
+    }
+
     clearSubscriptions() {
         this.subscriptions.forEach(s => s.unsubscribe());
         this.subscriptions = [];
+        this.messageListeners.clear();
 
         // Resetting timeout resolvers
         const global_timeouts = globalObserver.getState('global_timeouts') ?? [];

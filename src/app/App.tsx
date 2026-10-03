@@ -89,6 +89,7 @@ function App() {
         try {
             const parsed_accounts = JSON.parse(accounts_list);
             const parsed_client_accounts = JSON.parse(client_accounts) as TAuthData['account_list'];
+            const stored_active_loginid = localStorage.getItem('active_loginid') || '';
 
             const updateLocalStorage = (token: string, loginid: string) => {
                 localStorage.setItem('authToken', token);
@@ -97,7 +98,9 @@ function App() {
 
             // Handle demo account
             if (account_currency?.toUpperCase() === 'DEMO') {
-                const demo_account = Object.entries(parsed_accounts).find(([key]) => key.startsWith('VR'));
+                const demo_account = stored_active_loginid.startsWith('VR') && parsed_accounts[stored_active_loginid]
+                    ? [stored_active_loginid, parsed_accounts[stored_active_loginid]]
+                    : Object.entries(parsed_accounts).find(([key]) => key.startsWith('VR'));
 
                 if (demo_account) {
                     const [loginid, token] = demo_account;
@@ -109,6 +112,11 @@ function App() {
             // Handle real account with valid currency
             if (account_currency?.toUpperCase() !== 'DEMO' && is_valid_currency) {
                 const real_account = Object.entries(parsed_client_accounts).find(
+                    ([loginid, account]) =>
+                        loginid === stored_active_loginid &&
+                        !loginid.startsWith('VR') &&
+                        account.currency.toUpperCase() === account_currency?.toUpperCase()
+                ) || Object.entries(parsed_client_accounts).find(
                     ([loginid, account]) =>
                         !loginid.startsWith('VR') && account.currency.toUpperCase() === account_currency?.toUpperCase()
                 );

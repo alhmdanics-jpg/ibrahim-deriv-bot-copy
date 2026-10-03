@@ -143,7 +143,7 @@ export default Engine =>
         async handleOnMessageForAccumulators() {
             let ticks_stayed_in_list = [];
             return new Promise(resolve => {
-                const subscription = api_base.api.onMessage().subscribe(({ data }) => {
+                api_base.subscribeToMessages(({ data }) => {
                     if (data.msg_type === 'proposal') {
                         try {
                             this.subscription_id_for_accumulators = data.subscription.id;
@@ -156,7 +156,6 @@ export default Engine =>
                         }
                     }
                 });
-                api_base.pushSubscription(subscription);
             });
         }
 
