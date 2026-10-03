@@ -10,6 +10,7 @@ import { StoreProvider } from '@/hooks/useStore';
 import CallbackPage from '@/pages/callback';
 import Endpoint from '@/pages/endpoint';
 import { TAuthData } from '@/types/api-types';
+import { isDemoAccount } from '@/utils/auth-utils';
 import { initializeI18n, localize, TranslationProvider } from '@deriv-com/translations';
 import CoreStoreProvider from './CoreStoreProvider';
 import './app-root.scss';
@@ -98,9 +99,9 @@ function App() {
 
             // Handle demo account
             if (account_currency?.toUpperCase() === 'DEMO') {
-                const demo_account = stored_active_loginid.startsWith('VR') && parsed_accounts[stored_active_loginid]
+                const demo_account = isDemoAccount(stored_active_loginid) && parsed_accounts[stored_active_loginid]
                     ? [stored_active_loginid, parsed_accounts[stored_active_loginid]]
-                    : Object.entries(parsed_accounts).find(([key]) => key.startsWith('VR'));
+                    : Object.entries(parsed_accounts).find(([key]) => isDemoAccount(key));
 
                 if (demo_account) {
                     const [loginid, token] = demo_account;
@@ -114,11 +115,11 @@ function App() {
                 const real_account = Object.entries(parsed_client_accounts).find(
                     ([loginid, account]) =>
                         loginid === stored_active_loginid &&
-                        !loginid.startsWith('VR') &&
+                        !isDemoAccount(loginid) &&
                         account.currency.toUpperCase() === account_currency?.toUpperCase()
                 ) || Object.entries(parsed_client_accounts).find(
                     ([loginid, account]) =>
-                        !loginid.startsWith('VR') && account.currency.toUpperCase() === account_currency?.toUpperCase()
+                        !isDemoAccount(loginid) && account.currency.toUpperCase() === account_currency?.toUpperCase()
                 );
 
                 if (real_account) {

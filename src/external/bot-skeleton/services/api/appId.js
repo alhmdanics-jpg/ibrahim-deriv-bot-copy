@@ -4,10 +4,72 @@ import DerivAPIBasic from '@deriv/deriv-api/dist/DerivAPIBasic';
 import { getInitialLanguage } from '@deriv-com/translations';
 import APIMiddleware from './api-middleware';
 
-export const generateDerivApiInstance = () => {
+const OPTIONS_API_URL = 'https://api.derivws.com/trading/v1/options';
+const OPTIONS_PUBLIC_WEBSOCKET_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
+
+const getOptionsApiJson = async (response, action) => {
+    const result = await response.json();
+    if (!response.ok) {
+        const message = result?.errors?.[0]?.message || `${action} failed with HTTP ${response.status}`;
+        throw new Error(message);
+    }
+    return result;
+};
+
+export const isOAuthAccessToken = token => Boolean(token && token === localStorage.getItem('callback_token'));
+
+export const getOAuthOptionsAccounts = async accessToken => {
+    console.info('[OAuthTrace] accounts_rest.request');
+    const startedAt = Date.now();
+    const response = await fetch(`${OPTIONS_API_URL}/accounts`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(30_000),
+    });
+    console.info('[OAuthTrace] accounts_rest.response', {
+        status: response.status,
+        duration_ms: Date.now() - startedAt,
+    });
+    const result = await getOptionsApiJson(response, 'Options accounts request');
+    const accounts = Array.isArray(result?.data)
+        ? result.data
+        : Array.isArray(result?.data?.accounts)
+          ? result.data.accounts
+          : result?.data
+            ? [result.data]
+            : [];
+
+    return accounts.filter(account => account?.account_id && account?.account_type);
+};
+
+export const getOAuthOptionsWebSocketUrl = async (accessToken, accountId) => {
+    if (!accountId) throw new Error('The active Options account ID is missing.');
+
+    console.info('[OAuthTrace] otp.request');
+    const startedAt = Date.now();
+    const response = await fetch(`${OPTIONS_API_URL}/accounts/${encodeURIComponent(accountId)}/otp`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(30_000),
+    });
+    console.info('[OAuthTrace] otp.response', {
+        status: response.status,
+        duration_ms: Date.now() - startedAt,
+    });
+    const result = await getOptionsApiJson(response, 'Options WebSocket OTP request');
+    const websocketUrl = result?.data?.url;
+
+    if (typeof websocketUrl !== 'string' || !websocketUrl.startsWith('wss://')) {
+        throw new Error('Deriv did not return a valid authenticated WebSocket URL.');
+    }
+
+    return websocketUrl;
+};
+
+export const generateDerivApiInstance = (authenticatedWebSocketUrl = '') => {
     const cleanedServer = getSocketURL().replace(/[^a-zA-Z0-9.]/g, '');
     const cleanedAppId = getAppId()?.replace?.(/[^a-zA-Z0-9]/g, '') ?? getAppId();
-    const socket_url = `wss://${cleanedServer}/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
+    const socket_url = authenticatedWebSocketUrl || `wss://${cleanedServer}/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
     const deriv_socket = new WebSocket(socket_url);
     deriv_socket.addEventListener('open', () => console.info('[OAuthTrace] WebSocket open'));
     deriv_socket.addEventListener('error', () => console.info('[OAuthTrace] WebSocket error'));
@@ -18,6 +80,15 @@ export const generateDerivApiInstance = () => {
     });
     return deriv_api;
 };
+
+export const generateOAuthDerivApiInstance = async (accessToken, accountId) => {
+    const websocketUrl = await getOAuthOptionsWebSocketUrl(accessToken, accountId);
+    const api = generateDerivApiInstance(websocketUrl);
+    console.info('[OAuthTrace] api_instance.created');
+    return api;
+};
+
+export const generatePublicDerivApiInstance = () => generateDerivApiInstance(OPTIONS_PUBLIC_WEBSOCKET_URL);
 
 export const getLoginId = () => {
     const login_id = localStorage.getItem('active_loginid');

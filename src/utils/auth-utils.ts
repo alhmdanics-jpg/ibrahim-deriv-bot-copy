@@ -11,6 +11,12 @@ import Cookies from 'js-cookie';
  */
 export const isDemoAccount = (loginid: string): boolean => {
     if (!loginid) return false;
+    try {
+        const account = JSON.parse(localStorage.getItem('clientAccounts') ?? '{}')[loginid];
+        if (account?.is_options_account) return account.account_type === 'demo' || Boolean(account.is_virtual);
+    } catch {
+        // Fall through to the legacy account ID check.
+    }
     return loginid.startsWith('VRTC') || loginid.startsWith('VRW');
 };
 

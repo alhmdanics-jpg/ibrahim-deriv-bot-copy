@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@deriv-com/ui';
-import { generateDerivApiInstance } from '@/external/bot-skeleton/services/api/appId';
+import { getOAuthOptionsAccounts } from '@/external/bot-skeleton/services/api/appId';
 
 const CALLBACK_ENDPOINT = '/oauth/token';
 const DIAGNOSTIC_TIMEOUT_MS = 30_000;
@@ -34,7 +34,6 @@ const CallbackPage = () => {
 
     useEffect(() => {
         const exchangeCode = async () => {
-            let api: any = null;
             logOAuthTrace('callback.start');
 
             try {
@@ -99,74 +98,61 @@ const CallbackPage = () => {
                 }
 
                 const access_token = result.access_token;
+                logOAuthTrace('token_exchange.success');
 
-                api = generateDerivApiInstance();
-                logOAuthTrace('api_instance.created');
-
-                if (!api) {
-                    throw new Error('Unable to initialize Deriv API.');
-                }
-
-                logOAuthTrace('authorize.start');
-                const authorize_response = await withDiagnosticTimeout(
-                    api.authorize(access_token),
-                    'Deriv authorize request'
+                const account_list = await withDiagnosticTimeout(
+                    getOAuthOptionsAccounts(access_token),
+                    'Options accounts request'
                 );
-                logOAuthTrace('authorize.resolved');
+                logOAuthTrace('accounts.selected_count', { account_count: account_list.length });
 
-                if (authorize_response?.error) {
-                    throw new Error(
-                        authorize_response.error.message || 'Deriv authorization failed.'
-                    );
-                }
-
-                const authorize = authorize_response?.authorize;
-
-                if (!authorize) {
-                    throw new Error('Deriv authorization response is missing.');
-                }
-
-                const account_list = authorize.account_list || [];
-
-                if (account_list.length === 0) {
-                    throw new Error('No Deriv accounts were returned.');
-                }
+                if (account_list.length === 0) throw new Error('No Deriv Options accounts were returned.');
 
                 const accountsList: Record<string, string> = {};
                 const clientAccounts: Record<string, any> = {};
 
                 account_list.forEach((account: any) => {
-                    if (!account.loginid) return;
+                    accountsList[account.account_id] = access_token;
 
-                    const accountToken = account.token || access_token;
-                    accountsList[account.loginid] = accountToken;
-
-                    clientAccounts[account.loginid] = {
-                        loginid: account.loginid,
-                        token: accountToken,
-                        currency: account.currency || '',
-                        is_virtual: account.is_virtual ?? false,
+                    clientAccounts[account.account_id] = {
+                        account_id: account.account_id,
+                        loginid: account.account_id,
+                        token: access_token,
+                        currency: account.currency || 'USD',
+                        is_virtual: account.account_type === 'demo' ? 1 : 0,
+                        is_disabled: account.status === 'active' ? 0 : 1,
+                        account_type: account.account_type,
+                        account_category: 'options',
+                        broker: 'deriv',
+                        created_at: 0,
+                        currency_type: 'fiat',
+                        landing_company_name: '',
+                        linked_to: [],
+                        balance: account.balance,
+                        is_options_account: true,
+                        options_account_id: account.account_id,
                     };
                 });
 
                 const requestedAccount = sessionStorage.getItem('oauth_account') || '';
                 const requestedIsDemo = requestedAccount.toLowerCase() === 'demo';
                 const matchingRequestedAccount = requestedIsDemo
-                    ? account_list.find((account: any) => account.is_virtual || account.loginid?.startsWith('VR'))
+                    ? account_list.find((account: any) => account.account_type === 'demo')
                     : account_list.find(
                           (account: any) =>
-                              !account.is_virtual &&
+                              account.account_type === 'real' &&
                               account.currency?.toUpperCase() === requestedAccount.toUpperCase()
                       );
-                const authorizedAccount = account_list.find(
-                    (account: any) => account.loginid === authorize.loginid
-                );
-                const activeAccount =
-                    matchingRequestedAccount || authorizedAccount || (account_list.length === 1 ? account_list[0] : null);
+                const activeAccount = matchingRequestedAccount ||
+                    (!requestedAccount
+                        ? account_list.find((account: any) => account.account_type === 'demo') || account_list[0]
+                        : null) ||
+                    (account_list.length === 1 ? account_list[0] : null);
 
-                if (!activeAccount?.loginid) {
-                    throw new Error('Unable to determine an active Deriv account.');
+                if (!activeAccount?.account_id) {
+                    throw new Error(`No Options account matches the requested ${requestedIsDemo ? 'demo' : 'real'} account.`);
                 }
+                logOAuthTrace('account.selected', { account_type: activeAccount.account_type });
 
                 localStorage.setItem('authToken', access_token);
                 localStorage.setItem(
@@ -186,7 +172,7 @@ const CallbackPage = () => {
 
                 localStorage.setItem(
                     'active_loginid',
-                    activeAccount.loginid
+                    activeAccount.account_id
                 );
 
                 localStorage.setItem(
@@ -199,11 +185,7 @@ const CallbackPage = () => {
                 sessionStorage.removeItem('oauth_redirect_uri');
                 sessionStorage.removeItem('oauth_account');
 
-                if (api?.disconnect) {
-                    api.disconnect();
-                }
-
-                const accountParam = activeAccount.is_virtual || activeAccount.loginid.startsWith('VR')
+                const accountParam = activeAccount.account_type === 'demo'
                     ? 'demo'
                     : activeAccount.currency || 'USD';
 
@@ -217,10 +199,6 @@ const CallbackPage = () => {
                 sessionStorage.removeItem('oauth_code_verifier');
                 sessionStorage.removeItem('oauth_redirect_uri');
                 sessionStorage.removeItem('oauth_account');
-
-                if (api?.disconnect) {
-                    api.disconnect();
-                }
 
                 setError(
                     err instanceof Error

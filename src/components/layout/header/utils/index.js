@@ -229,9 +229,17 @@ export const checkSwitcherType = async account_data => {
     if (is_high_risk) is_low_risk = false;
 
     account_data.modifiedAccountList.forEach(account => {
-        if (account.loginid.startsWith('VR')) virtual_accounts.push({ ...client_accounts[account], account });
+        const clientAccount = client_accounts[account.loginid] || {};
+        if (account.loginid.startsWith('VR') || clientAccount.is_virtual || clientAccount.account_type === 'demo') {
+            virtual_accounts.push({ ...clientAccount, account });
+        }
         if (account.loginid.startsWith('MF')) eu_accounts.push({ ...client_accounts[account], account });
-        if (account.loginid.startsWith('CR')) non_eu_accounts.push({ ...client_accounts[account], account });
+        if (
+            account.loginid.startsWith('CR') ||
+            (clientAccount.is_options_account && clientAccount.account_type === 'real')
+        ) {
+            non_eu_accounts.push({ ...clientAccount, account });
+        }
     });
 
     const real_accounts = eu_accounts.length + non_eu_accounts.length;

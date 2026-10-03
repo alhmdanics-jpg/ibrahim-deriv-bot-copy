@@ -13,7 +13,13 @@ import {
     setIsAuthorizing,
 } from './observables/connection-status-stream';
 import ApiHelpers from './api-helpers';
-import { generateDerivApiInstance, V2GetActiveClientId, V2GetActiveToken } from './appId';
+import {
+    generateDerivApiInstance,
+    generateOAuthDerivApiInstance,
+    isOAuthAccessToken,
+    V2GetActiveClientId,
+    V2GetActiveToken,
+} from './appId';
 import chart_api from './chart-api';
 
 type CurrentSubscription = {
@@ -60,6 +66,7 @@ class APIBase {
     active_symbols = [];
     current_auth_subscriptions: SubscriptionPromise[] = [];
     is_authorized = false;
+    is_options_oauth = false;
     active_symbols_promise: Promise<void> | null = null;
     common_store: CommonStore | undefined;
     landing_company: string | null = null;
@@ -88,6 +95,8 @@ class APIBase {
 
     async init(force_create_connection = false) {
         this.toggleRunButton(true);
+        const activeToken = V2GetActiveToken();
+        const isOptionsOAuth = isOAuthAccessToken(activeToken);
 
         if (this.api) {
             this.unsubscribeAllSubscriptions();
@@ -104,7 +113,26 @@ class APIBase {
                 this.api.disconnect();
             }
 
-            this.api = generateDerivApiInstance();
+            if (isOptionsOAuth && activeToken) {
+                setIsAuthorizing(true);
+                setIsAuthorized(false);
+                this.is_authorized = false;
+                try {
+                    const accountId = V2GetActiveClientId();
+                    this.account_id = accountId ?? '';
+                    this.api = await generateOAuthDerivApiInstance(activeToken, accountId);
+                    this.is_options_oauth = true;
+                } catch (error) {
+                    setConnectionStatus(CONNECTION_STATUS.CLOSED);
+                    setIsAuthorized(false);
+                    setIsAuthorizing(false);
+                    globalObserver.emit('Error', error);
+                    return;
+                }
+            } else {
+                this.api = generateDerivApiInstance();
+                this.is_options_oauth = false;
+            }
             this.api?.connection.addEventListener('open', this.onsocketopen);
             this.api?.connection.addEventListener('close', this.onsocketclose);
             this.messageListeners.forEach(listener => {
@@ -122,9 +150,13 @@ class APIBase {
         if (this.time_interval) clearInterval(this.time_interval);
         this.time_interval = null;
 
-        if (V2GetActiveToken()) {
+        if (activeToken) {
             setIsAuthorizing(true);
-            await this.authorizeAndSubscribe();
+            if (isOptionsOAuth) {
+                await this.authorizeOptionsAccount(activeToken);
+            } else {
+                await this.authorizeAndSubscribe();
+            }
         }
 
         chart_api.init(force_create_connection);
@@ -223,6 +255,95 @@ class APIBase {
         }
     }
 
+    async authorizeOptionsAccount(accessToken: string) {
+        if (!this.api) return;
+
+        try {
+            await this.waitForConnectionOpen();
+            const accounts = JSON.parse(localStorage.getItem('clientAccounts') || '{}');
+            const activeAccount = accounts[this.account_id || V2GetActiveClientId() || ''];
+            const accountList = Object.values(accounts).filter(
+                (account: any) => account?.is_options_account
+            ) as TAuthData['account_list'];
+
+            if (!activeAccount || !accountList.length) {
+                throw new Error('The selected Options account is missing from local account data.');
+            }
+
+            const authData = {
+                account_list: accountList,
+                balance: Number(activeAccount.balance || 0),
+                country: '',
+                currency: activeAccount.currency || 'USD',
+                email: '',
+                fullname: '',
+                is_virtual: activeAccount.is_virtual ? 1 : 0,
+                landing_company_fullname: '',
+                landing_company_name: '',
+                linked_to: [],
+                local_currencies: {},
+                loginid: activeAccount.loginid,
+                preferred_language: '',
+                scopes: ['trade'],
+                upgradeable_landing_companies: [],
+                user_id: 0,
+                token: accessToken,
+            } as TAuthData;
+
+            this.account_id = activeAccount.loginid;
+            this.account_info = authData;
+            setAccountList(accountList);
+            setAuthData(authData);
+            setIsAuthorized(true);
+            this.is_authorized = true;
+            this.toggleRunButton(false);
+            this.has_active_symbols = false;
+            this.active_symbols_promise = this.getActiveSymbols();
+            this.subscribe();
+        } catch (error) {
+            this.is_authorized = false;
+            setIsAuthorized(false);
+            globalObserver.emit('Error', error);
+        } finally {
+            setIsAuthorizing(false);
+        }
+    }
+
+    private waitForConnectionOpen() {
+        const connection = this.api?.connection as unknown as WebSocket | undefined;
+        if (!connection) return Promise.reject(new Error('Options WebSocket is unavailable.'));
+        if (connection.readyState === WebSocket.OPEN) return Promise.resolve();
+
+        return new Promise<void>((resolve, reject) => {
+            const timeoutId = window.setTimeout(() => {
+                cleanup();
+                reject(new Error('Options WebSocket did not open within 30 seconds.'));
+            }, 30_000);
+            const cleanup = () => {
+                window.clearTimeout(timeoutId);
+                connection.removeEventListener('open', onOpen);
+                connection.removeEventListener('error', onError);
+                connection.removeEventListener('close', onClose);
+            };
+            const onOpen = () => {
+                cleanup();
+                resolve();
+            };
+            const onError = () => {
+                cleanup();
+                reject(new Error('Options WebSocket connection failed.'));
+            };
+            const onClose = () => {
+                cleanup();
+                reject(new Error('Options WebSocket closed before opening.'));
+            };
+
+            connection.addEventListener('open', onOpen, { once: true });
+            connection.addEventListener('error', onError, { once: true });
+            connection.addEventListener('close', onClose, { once: true });
+        });
+    }
+
     async getSelfExclusion() {
         if (!this.api || !this.is_authorized) return;
         await this.api.getSelfExclusion();
@@ -236,7 +357,7 @@ class APIBase {
                     const subscription = this.api?.send({
                         [streamName]: 1,
                         subscribe: 1,
-                        ...(streamName === 'balance' ? { account: 'all' } : {}),
+                        ...(streamName === 'balance' && !this.is_options_oauth ? { account: 'all' } : {}),
                     });
                     if (subscription) {
                         this.current_auth_subscriptions.push(subscription);

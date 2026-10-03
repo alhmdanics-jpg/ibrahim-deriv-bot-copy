@@ -1,4 +1,9 @@
-import { generateDerivApiInstance, V2GetActiveToken } from './appId';
+import {
+    generateDerivApiInstance,
+    generatePublicDerivApiInstance,
+    isOAuthAccessToken,
+    V2GetActiveToken,
+} from './appId';
 
 class ChartAPI {
     api;
@@ -20,7 +25,9 @@ class ChartAPI {
                 this.api.disconnect();
                 this.api.connection.removeEventListener('close', this.onsocketclose.bind(this));
             }
-            this.api = await generateDerivApiInstance();
+            this.api = isOAuthAccessToken(V2GetActiveToken())
+                ? generatePublicDerivApiInstance()
+                : generateDerivApiInstance();
             this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
             this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
         }
@@ -33,6 +40,10 @@ class ChartAPI {
 
         const token = V2GetActiveToken();
         if (!token || !this.api) return;
+        if (isOAuthAccessToken(token)) {
+            this.is_authorized = true;
+            return;
+        }
 
         try {
             const { error } = await this.api.authorize(token);

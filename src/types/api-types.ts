@@ -913,6 +913,8 @@ export type TAccount = {
     landing_company_name: string;
     linked_to: Array<any>;
     loginid: string;
+    is_options_account?: boolean;
+    options_account_id?: string;
 };
 
 export type TAuthData = {

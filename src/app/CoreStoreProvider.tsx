@@ -5,6 +5,7 @@ import { getDecimalPlaces, toMoment } from '@/components/shared';
 import { FORM_ERROR_MESSAGES } from '@/components/shared/constants/form-error-messages';
 import { initFormErrorMessages } from '@/components/shared/utils/validation/declarative-validation-rules';
 import { api_base } from '@/external/bot-skeleton';
+import { isOAuthAccessToken, V2GetActiveToken } from '@/external/bot-skeleton/services/api/appId';
 import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { useOauth2 } from '@/hooks/auth/useOauth2';
 import { useApiBase } from '@/hooks/useApiBase';
@@ -112,7 +113,7 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
 
         // Only setup the interval if the connection is open and we have access to the API
         if (client && connectionStatus === CONNECTION_STATUS.OPENED && api_base?.api) {
-            if (!appInitialization.current) {
+            if (!appInitialization.current && !isOAuthAccessToken(V2GetActiveToken())) {
                 appInitialization.current = true;
                 api_base.api?.websiteStatus().then((res: TSocketResponseData<'website_status'>) => {
                     client.setWebsiteStatus(res.website_status);
@@ -151,26 +152,29 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
 
             if (msg_type === 'balance' && data && !error) {
                 const balance = data.balance;
+                const optionsBalance = balance as typeof balance & { account_id?: string; loginid?: string };
                 if (balance?.accounts) {
                     client.setAllAccountsBalance(balance);
-                } else if (balance?.loginid) {
-                    if (!client?.all_accounts_balance?.accounts || !balance?.loginid) return;
-                    const accounts = { ...client.all_accounts_balance.accounts };
-                    const currentLoggedInBalance = { ...accounts[balance.loginid] };
+                } else if (optionsBalance?.loginid || optionsBalance?.account_id || api_base.is_options_oauth) {
+                    const balanceLoginid = optionsBalance.loginid || optionsBalance.account_id || activeLoginid;
+                    if (!balanceLoginid) return;
+                    const accounts = { ...(client.all_accounts_balance?.accounts || {}) };
+                    const currentLoggedInBalance = { ...accounts[balanceLoginid] };
                     currentLoggedInBalance.balance = balance.balance;
+                    currentLoggedInBalance.currency = balance.currency || currentLoggedInBalance.currency;
 
                     const updatedAccounts = {
-                        ...client.all_accounts_balance,
+                        ...(client.all_accounts_balance || {}),
                         accounts: {
-                            ...client.all_accounts_balance.accounts,
-                            [balance.loginid]: currentLoggedInBalance,
+                            ...accounts,
+                            [balanceLoginid]: currentLoggedInBalance,
                         },
                     };
-                    client.setAllAccountsBalance(updatedAccounts);
+                    client.setAllAccountsBalance(updatedAccounts as any);
                 }
             }
         },
-        [client, oAuthLogout]
+        [activeLoginid, client, oAuthLogout]
     );
 
     useEffect(() => {
@@ -189,6 +193,19 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     useEffect(() => {
         if (!isAuthorizing && isAuthorized && !accountInitialization.current && client) {
             accountInitialization.current = true;
+            if (isOAuthAccessToken(V2GetActiveToken())) {
+                const active_account = client.accounts[activeLoginid];
+                const client_information: TClientInformation = {
+                    loginid: activeLoginid,
+                    currency: active_account?.currency,
+                    user_id: activeLoginid,
+                };
+                Cookies.set('client_information', JSON.stringify(client_information), {
+                    domain: currentDomain,
+                });
+                return;
+            }
+
             api_base.api.getSettings().then((settingRes: TSocketResponseData<'get_settings'>) => {
                 client?.setAccountSettings(settingRes.get_settings);
                 const client_information: TClientInformation = {

@@ -124,7 +124,9 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
         activeAccount?.loginid,
     ]);
     const modifiedCRAccountList = useMemo(() => {
-        return modifiedAccountList?.filter(account => account?.loginid?.includes('CR')) ?? [];
+        return modifiedAccountList?.filter(
+            account => account?.loginid?.includes('CR') || (account?.is_options_account && !account?.is_virtual)
+        ) ?? [];
     }, [modifiedAccountList]);
 
     const modifiedMFAccountList = useMemo(() => {
@@ -132,10 +134,12 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
     }, [modifiedAccountList]);
 
     const modifiedVRTCRAccountList = useMemo(() => {
-        return modifiedAccountList?.filter(account => account?.loginid?.includes('VRT')) ?? [];
+        return modifiedAccountList?.filter(
+            account => account?.loginid?.includes('VRT') || (account?.is_options_account && account?.is_virtual)
+        ) ?? [];
     }, [modifiedAccountList]);
 
-    const switchAccount = async (loginId: number) => {
+    const switchAccount = async (loginId: string) => {
         if (loginId.toString() === activeAccount?.loginid) return;
         const account_list = JSON.parse(localStorage.getItem('accountsList') ?? '{}');
         const token = account_list[loginId];
