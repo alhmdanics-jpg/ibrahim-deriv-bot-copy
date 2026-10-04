@@ -81,6 +81,12 @@ export const generateDerivApiInstance = (authenticatedWebSocketUrl = '') => {
     return deriv_api;
 };
 
+export const generateMarketDataApiInstance = () => {
+    const cleanedAppId = getAppId()?.replace?.(/[^a-zA-Z0-9]/g, '') ?? getAppId();
+    const socket_url = `wss://ws.derivws.com/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
+    return generateDerivApiInstance(socket_url);
+};
+
 export const generateOAuthDerivApiInstance = async (accessToken, accountId) => {
     const websocketUrl = await getOAuthOptionsWebSocketUrl(accessToken, accountId);
     const api = generateDerivApiInstance(websocketUrl);

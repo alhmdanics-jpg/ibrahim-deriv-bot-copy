@@ -15,6 +15,7 @@ import {
 import ApiHelpers from './api-helpers';
 import {
     generateDerivApiInstance,
+    generateMarketDataApiInstance,
     generateOAuthDerivApiInstance,
     isOAuthAccessToken,
     V2GetActiveClientId,
@@ -383,7 +384,7 @@ class APIBase {
 
     getActiveSymbols = async () => {
         const requestActiveSymbols = async () => {
-            const public_api = generateDerivApiInstance();
+            const public_api = generateMarketDataApiInstance();
             const connection = public_api.connection;
 
             try {
