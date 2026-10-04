@@ -32,6 +32,25 @@ export default class ActiveSymbols {
             this.active_symbols = api_base?.active_symbols ?? [];
         }
 
+        this.active_symbols = this.active_symbols.map(symbol => {
+            const getDisplayName = value =>
+                value
+                    ?.split('_')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+
+            return {
+                ...symbol,
+                symbol: symbol.symbol ?? symbol.underlying_symbol,
+                display_name: symbol.display_name ?? symbol.underlying_symbol_name ?? symbol.underlying_symbol,
+                pip: symbol.pip ?? symbol.pip_size,
+                market_display_name: symbol.market_display_name ?? getDisplayName(symbol.market),
+                submarket_display_name:
+                    symbol.submarket_display_name ?? getDisplayName(symbol.submarket ?? symbol.subgroup),
+                submarket: symbol.submarket ?? symbol.subgroup,
+            };
+        });
+
         this.processed_symbols = this.processActiveSymbols();
 
         // TODO: fix need to look into it as the method is not present
