@@ -16,7 +16,13 @@ export default class ActiveSymbols {
     }
 
     async retrieveActiveSymbols(is_forced_update = false) {
-        await this.trading_times.initialise();
+        if (api_base.is_options_oauth) {
+            this.trading_times.initialise().catch(error => {
+                console.error('[API] Failed to initialize trading times:', error);
+            });
+        } else {
+            await this.trading_times.initialise();
+        }
 
         if (!is_forced_update && this.is_initialised) {
             await this.init_promise;
