@@ -298,7 +298,14 @@ class APIBase {
             this.is_authorized = true;
             this.toggleRunButton(false);
             this.has_active_symbols = false;
-            this.active_symbols_promise = this.getActiveSymbols();
+            this.active_symbols_promise = this.getActiveSymbols().then(() => {
+                const apiHelpers = ApiHelpers.instance as any;
+                if (apiHelpers?.active_symbols) {
+                    apiHelpers.active_symbols.retrieveActiveSymbols(true).catch((error: Error) => {
+                        console.error('[API] Failed to retrieve active symbols:', error);
+                    });
+                }
+            });
             this.subscribe();
         } catch (error) {
             this.is_authorized = false;
