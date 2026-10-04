@@ -375,19 +375,59 @@ class APIBase {
     }
 
     getActiveSymbols = async () => {
-        await doUntilDone(() => this.api?.send({ active_symbols: 'brief' }), [], this).then(
-            ({ active_symbols = [], error = {} }) => {
-                const pip_sizes = {};
-                if (active_symbols.length) this.has_active_symbols = true;
-                active_symbols.forEach(({ symbol, pip }: { symbol: string; pip: string }) => {
-                    (pip_sizes as Record<string, number>)[symbol] = +(+pip).toExponential().substring(3);
-                });
-                this.pip_sizes = pip_sizes as Record<string, number>;
-                this.toggleRunButton(false);
-                this.active_symbols = active_symbols;
-                return active_symbols || error;
+        const requestActiveSymbols = async () => {
+            const public_api = generateDerivApiInstance();
+            const connection = public_api.connection;
+
+            try {
+                if (connection.readyState !== 1) {
+                    await new Promise<void>((resolve, reject) => {
+                        const cleanup = () => {
+                            connection.removeEventListener('open', onOpen);
+                            connection.removeEventListener('error', onError);
+                            connection.removeEventListener('close', onClose);
+                        };
+                        const onOpen = () => {
+                            cleanup();
+                            resolve();
+                        };
+                        const onError = () => {
+                            cleanup();
+                            reject(new Error('Public market WebSocket connection failed.'));
+                        };
+                        const onClose = () => {
+                            cleanup();
+                            reject(new Error('Public market WebSocket closed before opening.'));
+                        };
+
+                        connection.addEventListener('open', onOpen);
+                        connection.addEventListener('error', onError);
+                        connection.addEventListener('close', onClose);
+
+                        if (connection.readyState === 1) onOpen();
+                        else if (connection.readyState > 1) onClose();
+                    });
+                }
+
+                const response = await public_api.send({ active_symbols: 'brief' });
+                if (response.error) throw { error: response.error };
+                return response.active_symbols ?? [];
+            } finally {
+                public_api.disconnect();
             }
-        );
+        };
+
+        const active_symbols = await doUntilDone(() => requestActiveSymbols(), []);
+        const pip_sizes = {};
+        if (active_symbols.length) this.has_active_symbols = true;
+        active_symbols.forEach(({ symbol, underlying_symbol, pip, pip_size }) => {
+            const symbol_name = symbol ?? underlying_symbol;
+            const pip_value = pip ?? pip_size;
+            (pip_sizes as Record<string, number>)[symbol_name] = +(+pip_value).toExponential().substring(3);
+        });
+        this.pip_sizes = pip_sizes as Record<string, number>;
+        this.toggleRunButton(false);
+        this.active_symbols = active_symbols;
     };
 
     toggleRunButton = (toggle: boolean) => {
