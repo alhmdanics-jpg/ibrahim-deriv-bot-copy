@@ -81,9 +81,11 @@ export const generateDerivApiInstance = (authenticatedWebSocketUrl = '') => {
     return deriv_api;
 };
 
-export const generateMarketDataApiInstance = () => {
+export const generateMarketDataApiInstance = (useFallbackEndpoint = false) => {
     const cleanedAppId = getAppId()?.replace?.(/[^a-zA-Z0-9]/g, '') ?? getAppId();
-    const socket_url = `wss://ws.derivws.com/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
+    const socket_url = useFallbackEndpoint
+        ? 'wss://ws.binaryws.com/websockets/v3'
+        : `wss://ws.derivws.com/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
     return generateDerivApiInstance(socket_url);
 };
 
