@@ -15,7 +15,6 @@ import {
 import ApiHelpers from './api-helpers';
 import {
     generateDerivApiInstance,
-    generateMarketDataApiInstance,
     generateOAuthDerivApiInstance,
     isOAuthAccessToken,
     V2GetActiveClientId,
@@ -384,53 +383,13 @@ class APIBase {
 
     getActiveSymbols = async () => {
         const requestActiveSymbols = async () => {
-            let last_error: unknown;
-
-            for (const useFallbackEndpoint of [false, true]) {
-                const public_api = generateMarketDataApiInstance(useFallbackEndpoint);
-                const connection = public_api.connection;
-
-                try {
-                    if (connection.readyState !== 1) {
-                        await new Promise<void>((resolve, reject) => {
-                            const cleanup = () => {
-                                connection.removeEventListener('open', onOpen);
-                                connection.removeEventListener('error', onError);
-                                connection.removeEventListener('close', onClose);
-                            };
-                            const onOpen = () => {
-                                cleanup();
-                                resolve();
-                            };
-                            const onError = () => {
-                                cleanup();
-                                reject(new Error('Public market WebSocket connection failed.'));
-                            };
-                            const onClose = () => {
-                                cleanup();
-                                reject(new Error('Public market WebSocket closed before opening.'));
-                            };
-
-                            connection.addEventListener('open', onOpen);
-                            connection.addEventListener('error', onError);
-                            connection.addEventListener('close', onClose);
-
-                            if (connection.readyState === 1) onOpen();
-                            else if (connection.readyState > 1) onClose();
-                        });
-                    }
-
-                    const response = await public_api.send({ active_symbols: 'brief' });
-                    if (response.error) throw { error: response.error };
-                    return response.active_symbols ?? [];
-                } catch (error) {
-                    last_error = error;
-                } finally {
-                    public_api.disconnect();
-                }
-            }
-
-            throw last_error;
+            const response = await fetch('/api/market/active-symbols', {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            });
+            const result = await response.json();
+            if (!response.ok || result.error) throw new Error(result.error || 'Unable to retrieve market symbols.');
+            return Array.isArray(result.active_symbols) ? result.active_symbols : [];
         };
 
         const active_symbols = await doUntilDone(() => requestActiveSymbols(), []);

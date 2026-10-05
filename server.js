@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 10000;
 
@@ -21,6 +22,49 @@ const mimeTypes = {
     '.woff': 'font/woff',
     '.woff2': 'font/woff2',
 };
+
+const requestActiveSymbols = endpoint =>
+    new Promise((resolve, reject) => {
+        const connection = new WebSocket(endpoint);
+        let settled = false;
+        const timeout = setTimeout(() => finish(new Error('Deriv market data request timed out.')), 15000);
+
+        const finish = (error, active_symbols) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (connection.readyState === WebSocket.OPEN || connection.readyState === WebSocket.CONNECTING) {
+                connection.close();
+            }
+            if (error) reject(error);
+            else resolve(active_symbols);
+        };
+
+        connection.on('open', () => {
+            connection.send(JSON.stringify({ active_symbols: 'brief' }), error => {
+                if (error) finish(error);
+            });
+        });
+
+        connection.on('message', message => {
+            let response;
+            try {
+                response = JSON.parse(message.toString());
+            } catch {
+                finish(new Error('Deriv returned an invalid market data response.'));
+                return;
+            }
+
+            if (response.error) {
+                finish(new Error(response.error.message || 'Deriv rejected the market data request.'));
+            } else if (response.msg_type === 'active_symbols' && Array.isArray(response.active_symbols)) {
+                finish(null, response.active_symbols);
+            }
+        });
+
+        connection.on('error', error => finish(error));
+        connection.on('close', () => finish(new Error('Deriv market data connection closed before the response.')));
+    });
 
 const readBody = req =>
     new Promise((resolve, reject) => {
@@ -43,6 +87,31 @@ const readBody = req =>
 
 const server = http.createServer(async (req, res) => {
     try {
+        if (req.method === 'GET' && new URL(req.url, 'http://localhost').pathname === '/api/market/active-symbols') {
+            let last_error;
+            for (const endpoint of ['wss://ws.binaryws.com/websockets/v3', 'wss://ws.derivws.com/websockets/v3?app_id=65555']) {
+                try {
+                    const active_symbols = await requestActiveSymbols(endpoint);
+                    res.writeHead(200, {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-store',
+                    });
+                    res.end(JSON.stringify({ active_symbols }));
+                    return;
+                } catch (error) {
+                    last_error = error;
+                }
+            }
+
+            console.error('[MarketData] active_symbols request failed:', last_error?.message);
+            res.writeHead(502, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({ error: 'Unable to retrieve Deriv market symbols.' }));
+            return;
+        }
+
         // OAuth token exchange
         if (req.method === 'POST' && req.url === '/oauth/token') {
             console.info('[OAuthTrace] token_exchange.received');
