@@ -82,10 +82,11 @@ export const generateDerivApiInstance = (authenticatedWebSocketUrl = '') => {
 };
 
 export const generateMarketDataApiInstance = (useFallbackEndpoint = false) => {
+    const marketDataServer = getSocketURL().replace(/[^a-zA-Z0-9.]/g, '');
     const cleanedAppId = getAppId()?.replace?.(/[^a-zA-Z0-9]/g, '') ?? getAppId();
     const socket_url = useFallbackEndpoint
         ? 'wss://ws.binaryws.com/websockets/v3'
-        : `wss://ws.derivws.com/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
+        : `wss://${marketDataServer}/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
     return generateDerivApiInstance(socket_url);
 };
 
