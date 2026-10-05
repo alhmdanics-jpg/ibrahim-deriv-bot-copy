@@ -89,7 +89,7 @@ const server = http.createServer(async (req, res) => {
     try {
         if (req.method === 'GET' && new URL(req.url, 'http://localhost').pathname === '/api/market/active-symbols') {
             let last_error;
-            for (const endpoint of ['wss://ws.binaryws.com/websockets/v3', 'wss://ws.derivws.com/websockets/v3?app_id=65555']) {
+            for (const endpoint of ['wss://api.derivws.com/trading/v1/options/ws/public']) {
                 try {
                     const active_symbols = await requestActiveSymbols(endpoint);
                     res.writeHead(200, {
