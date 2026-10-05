@@ -19,7 +19,7 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
                 purchase_reference,
             },
             proposal: 1,
-            symbol: trade_option.symbol,
+            underlying_symbol: trade_option.symbol,
         };
         if (trade_option.prediction !== undefined) {
             proposal.selected_tick = trade_option.prediction;
@@ -54,7 +54,7 @@ export const tradeOptionToBuy = (contract_type, trade_option) => {
             duration: trade_option.duration,
             duration_unit: trade_option.duration_unit,
             multiplier: trade_option.multiplier,
-            symbol: trade_option.symbol,
+            underlying_symbol: trade_option.symbol,
         },
     };
     if (trade_option.prediction !== undefined) {

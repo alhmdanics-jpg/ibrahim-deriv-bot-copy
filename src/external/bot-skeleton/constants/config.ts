@@ -90,10 +90,10 @@ export const config = () => ({
         ],
         HIGHERLOWER: [
             {
-                CALL: localize('Higher'),
+                HIGHER: localize('Higher'),
             },
             {
-                PUT: localize('Lower'),
+                LOWER: localize('Lower'),
             },
         ],
         TOUCHNOTOUCH: [
