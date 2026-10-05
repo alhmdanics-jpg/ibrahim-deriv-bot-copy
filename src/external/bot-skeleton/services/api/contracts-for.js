@@ -57,7 +57,9 @@ export default class ContractsFor {
         if (contracts_for_category.length > 0) {
             barrier_types.forEach((barrier_type, index) => {
                 const has_selected_offset_type = ['+', '-'].includes(barrier_type);
-                const real_trade_type = this.getContractCategoryByTradeType(trade_type);
+                const real_trade_type = contracts_for_category.some(c => c.contract_category === trade_type)
+                    ? trade_type
+                    : this.getContractCategoryByTradeType(trade_type);
 
                 let contract = contracts_for_category.find(c => {
                     const { BARRIER_CATEGORIES } = config();
@@ -67,7 +69,8 @@ export default class ContractsFor {
 
                     const has_matching_category = c.contract_category === real_trade_type;
                     const has_matching_duration = durations.findIndex(d => d.unit === duration) !== -1;
-                    const has_matching_barrier_category = c.barrier_category === barrier_category;
+                    const has_matching_barrier_category =
+                        c.barrier_category === undefined || c.barrier_category === barrier_category;
                     const has_matching_barrier_type =
                         // Match offset type barriers.
                         (has_selected_offset_type && isOffset(c.barrier || c[barrier_props[index]])) ||
@@ -174,12 +177,17 @@ export default class ContractsFor {
 
     async getContractsByTradeType(symbol, trade_type) {
         const contracts = await this.getContractsFor(symbol);
-        const contract_category = this.getContractCategoryByTradeType(trade_type);
+        const has_direct_category = contracts.some(contract => contract.contract_category === trade_type);
+        const contract_category = has_direct_category ? trade_type : this.getContractCategoryByTradeType(trade_type);
         const barrier_category = this.getBarrierCategoryByTradeType(trade_type);
+        const { opposites } = config();
+        const contract_types = (opposites[trade_type.toUpperCase()] || []).map(type => Object.keys(type)[0]);
 
         return contracts.filter(contract => {
             const has_matching_category = contract.contract_category === contract_category;
-            const has_matching_barrier = contract.barrier_category === barrier_category;
+            const has_matching_barrier = contract.barrier_category === undefined
+                ? has_direct_category || contract_types.includes(contract.contract_type)
+                : contract.barrier_category === barrier_category;
 
             return has_matching_category && has_matching_barrier;
         });
