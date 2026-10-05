@@ -294,10 +294,11 @@ export default class AppStore {
                         });
                     }
                     DBot.initializeInterpreter();
-                }
-            }
+                                }
+            },
+            { fireImmediately: true }
         );
-    };
+       }; 
 
     registerLandingCompanyChangeReaction = () => {
         const { client } = this.core;
