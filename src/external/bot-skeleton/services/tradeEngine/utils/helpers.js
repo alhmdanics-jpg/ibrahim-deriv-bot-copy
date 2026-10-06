@@ -6,14 +6,25 @@ import { error as logError } from './broadcast';
 
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
+        const contract_trade_option = { ...trade_option };
+        if (type === 'HIGHER' && trade_option.higherDuration !== undefined) {
+            contract_trade_option.duration = trade_option.higherDuration;
+            contract_trade_option.duration_unit = trade_option.higherDurationUnit;
+            contract_trade_option.secondBarrierOffset = undefined;
+        } else if (type === 'LOWER' && trade_option.lowerDuration !== undefined) {
+            contract_trade_option.duration = trade_option.lowerDuration;
+            contract_trade_option.duration_unit = trade_option.lowerDurationUnit;
+            contract_trade_option.barrierOffset = trade_option.secondBarrierOffset;
+            contract_trade_option.secondBarrierOffset = undefined;
+        }
         const proposal = {
-            amount: trade_option.amount,
-            basis: trade_option.basis,
+            amount: contract_trade_option.amount,
+            basis: contract_trade_option.basis,
             contract_type: type,
-            currency: trade_option.currency,
-            duration: trade_option.duration,
-            duration_unit: trade_option.duration_unit,
-            multiplier: trade_option.multiplier,
+            currency: contract_trade_option.currency,
+            duration: contract_trade_option.duration,
+            duration_unit: contract_trade_option.duration_unit,
+            multiplier: contract_trade_option.multiplier,
             passthrough: {
                 contract_type: type,
                 purchase_reference,
@@ -21,23 +32,23 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
             proposal: 1,
             underlying_symbol: trade_option.symbol,
         };
-        if (trade_option.prediction !== undefined) {
-            proposal.selected_tick = trade_option.prediction;
+        if (contract_trade_option.prediction !== undefined) {
+            proposal.selected_tick = contract_trade_option.prediction;
         }
-        if (!['TICKLOW', 'TICKHIGH'].includes(type) && trade_option.prediction !== undefined) {
-            proposal.barrier = trade_option.prediction;
-        } else if (trade_option.barrierOffset !== undefined) {
-            proposal.barrier = trade_option.barrierOffset;
+        if (!['TICKLOW', 'TICKHIGH'].includes(type) && contract_trade_option.prediction !== undefined) {
+            proposal.barrier = contract_trade_option.prediction;
+        } else if (contract_trade_option.barrierOffset !== undefined) {
+            proposal.barrier = contract_trade_option.barrierOffset;
         }
-        if (trade_option.secondBarrierOffset !== undefined) {
-            proposal.barrier2 = trade_option.secondBarrierOffset;
+        if (contract_trade_option.secondBarrierOffset !== undefined) {
+            proposal.barrier2 = contract_trade_option.secondBarrierOffset;
         }
         if (['MULTUP', 'MULTDOWN'].includes(type)) {
             proposal.duration = undefined;
             proposal.duration_unit = undefined;
         }
-        if (!isEmptyObject(trade_option.limit_order)) {
-            proposal.limit_order = trade_option.limit_order;
+        if (!isEmptyObject(contract_trade_option.limit_order)) {
+            proposal.limit_order = contract_trade_option.limit_order;
         }
         return proposal;
     });
