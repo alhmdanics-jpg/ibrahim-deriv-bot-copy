@@ -69,15 +69,18 @@ export default class TransactionsStore {
         const statistics = trxs.reduce(
             (stats, { data }) => {
                 const { profit = 0, is_completed = false, buy_price = 0, payout, bid_price } = data as TContractInfo;
+                const numeric_profit = Number(profit);
+                const numeric_buy_price = Number(buy_price);
+                const numeric_payout = Number(payout ?? bid_price ?? 0);
                 if (is_completed) {
-                    if (profit > 0) {
+                    if (numeric_profit > 0) {
                         stats.won_contracts += 1;
-                        stats.total_payout += payout ?? bid_price ?? 0;
+                        stats.total_payout += numeric_payout;
                     } else {
                         stats.lost_contracts += 1;
                     }
-                    stats.total_profit += profit;
-                    stats.total_stake += buy_price;
+                    stats.total_profit += numeric_profit;
+                    stats.total_stake += numeric_buy_price;
                     total_runs += 1;
                 }
                 return stats;
@@ -107,16 +110,26 @@ export default class TransactionsStore {
         const is_completed = isEnded(data as ProposalOpenContract);
         const { run_id } = this.root_store.run_panel;
         const current_account = this.core?.client?.loginid as string;
+        const contract_data = data as TContractInfo & {
+            entry_spot?: string | number;
+            entry_spot_time?: string | number;
+            exit_spot?: string | number;
+            exit_spot_time?: string | number;
+        };
 
         const contract: TContractInfo = {
             ...data,
             is_completed,
             run_id,
             date_start: formatDate(data.date_start, 'YYYY-M-D HH:mm:ss [GMT]'),
-            entry_tick: data.entry_tick_display_value,
-            entry_tick_time: data.entry_tick_time && formatDate(data.entry_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
-            exit_tick: data.exit_tick_display_value,
-            exit_tick_time: data.exit_tick_time && formatDate(data.exit_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
+            entry_tick: contract_data.entry_spot ?? data.entry_tick_display_value,
+            entry_tick_time:
+                (contract_data.entry_spot_time ?? data.entry_tick_time) &&
+                formatDate(contract_data.entry_spot_time ?? data.entry_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
+            exit_tick: contract_data.exit_spot ?? data.exit_tick_display_value,
+            exit_tick_time:
+                (contract_data.exit_spot_time ?? data.exit_tick_time) &&
+                formatDate(contract_data.exit_spot_time ?? data.exit_tick_time, 'YYYY-M-D HH:mm:ss [GMT]'),
             profit: is_completed ? data.profit : 0,
         };
 

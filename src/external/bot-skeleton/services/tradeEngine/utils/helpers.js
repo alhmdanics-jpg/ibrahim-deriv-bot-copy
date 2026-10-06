@@ -4,8 +4,26 @@ import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
 
+const getBothBarrierOffset = (contract_type, trade_option, contract_types = trade_option.contractTypes) => {
+    const is_both_higher_lower =
+        contract_types?.includes('HIGHER') && contract_types?.includes('LOWER');
+    const barrier_offset = trade_option.barrierOffset;
+
+    if (
+        !is_both_higher_lower ||
+        contract_type !== 'LOWER' ||
+        typeof barrier_offset !== 'string' ||
+        !/^[+-]/.test(barrier_offset)
+    ) {
+        return barrier_offset;
+    }
+
+    return `${barrier_offset[0] === '+' ? '-' : '+'}${barrier_offset.slice(1)}`;
+};
+
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
+        const barrier_offset = getBothBarrierOffset(type, trade_option);
         const proposal = {
             amount: trade_option.amount,
             basis: trade_option.basis,
@@ -26,8 +44,8 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
         }
         if (!['TICKLOW', 'TICKHIGH'].includes(type) && trade_option.prediction !== undefined) {
             proposal.barrier = trade_option.prediction;
-        } else if (trade_option.barrierOffset !== undefined) {
-            proposal.barrier = trade_option.barrierOffset;
+        } else if (barrier_offset !== undefined) {
+            proposal.barrier = barrier_offset;
         }
         if (trade_option.secondBarrierOffset !== undefined) {
             proposal.barrier2 = trade_option.secondBarrierOffset;
@@ -42,7 +60,8 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
         return proposal;
     });
 
-export const tradeOptionToBuy = (contract_type, trade_option) => {
+export const tradeOptionToBuy = (contract_type, trade_option, contract_types) => {
+    const barrier_offset = getBothBarrierOffset(contract_type, trade_option, contract_types);
     const buy = {
         buy: '1',
         price: trade_option.amount,
@@ -62,8 +81,8 @@ export const tradeOptionToBuy = (contract_type, trade_option) => {
     }
     if (!['TICKLOW', 'TICKHIGH'].includes(contract_type) && trade_option.prediction !== undefined) {
         buy.parameters.barrier = trade_option.prediction;
-    } else if (trade_option.barrierOffset !== undefined) {
-        buy.parameters.barrier = trade_option.barrierOffset;
+    } else if (barrier_offset !== undefined) {
+        buy.parameters.barrier = barrier_offset;
     }
     if (trade_option.secondBarrierOffset !== undefined) {
         buy.parameters.barrier2 = trade_option.secondBarrierOffset;
