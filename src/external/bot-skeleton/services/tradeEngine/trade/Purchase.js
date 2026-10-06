@@ -38,7 +38,14 @@ export default Engine =>
                 // cannot guarantee an identical market entry spot.
                 const purchases = contract_types.map(type => {
                     const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
-                    const trade_option = proposal ? null : tradeOptionToBuy(type, this.tradeOptions);
+                    const trade_options = { ...this.tradeOptions };
+                    if (type === 'HIGHER') {
+                        trade_options.secondBarrierOffset = undefined;
+                    } else if (type === 'LOWER') {
+                        trade_options.barrierOffset = this.tradeOptions.secondBarrierOffset;
+                        trade_options.secondBarrierOffset = undefined;
+                    }
+                    const trade_option = proposal ? null : tradeOptionToBuy(type, trade_options);
                     const action = () =>
                         proposal
                             ? api_base.api.send({ buy: proposal.id, price: proposal.askPrice })
