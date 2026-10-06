@@ -39,13 +39,6 @@ export default Engine =>
                 const purchases = contract_types.map(type => {
                     const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
                     const trade_options = { ...this.tradeOptions };
-                    if (this.tradeOptions.higherDuration !== undefined && type === 'HIGHER') {
-                        trade_options.duration = this.tradeOptions.higherDuration;
-                        trade_options.duration_unit = this.tradeOptions.higherDurationUnit;
-                    } else if (this.tradeOptions.lowerDuration !== undefined && type === 'LOWER') {
-                        trade_options.duration = this.tradeOptions.lowerDuration;
-                        trade_options.duration_unit = this.tradeOptions.lowerDurationUnit;
-                    }
                     if (type === 'HIGHER') {
                         trade_options.secondBarrierOffset = undefined;
                     } else if (type === 'LOWER') {

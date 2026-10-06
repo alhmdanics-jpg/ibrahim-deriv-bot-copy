@@ -109,9 +109,8 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
 
         const market_block = trade_definition_block.getChildByType('trade_definition_market');
         const trade_type_block = trade_definition_block.getChildByType('trade_definition_tradetype');
-        const contract_type_block = trade_definition_block.getChildByType('trade_definition_contracttype');
 
-        if (!market_block || !trade_type_block || !contract_type_block) {
+        if (!market_block || !trade_type_block) {
             return;
         }
 
@@ -119,10 +118,6 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
         this.selected_market = market_block.getFieldValue('MARKET_LIST');
         this.selected_trade_type_category = trade_type_block.getFieldValue('TRADETYPECAT_LIST');
         this.selected_trade_type = trade_type_block.getFieldValue('TRADETYPE_LIST');
-        const was_both_higher_lower = this.both_options_active;
-        const is_both_higher_lower =
-            contract_type_block?.getFieldValue('TYPE_LIST') === 'both' && this.selected_trade_type === 'higherlower';
-        this.updateBothDurationInputsVisibility(is_both_higher_lower);
         this.selected_duration = this.getFieldValue('DURATIONTYPE_LIST');
         this.selected_barrier_types = [
             this.getFieldValue('BARRIEROFFSETTYPE_LIST') || config().BARRIER_TYPES[0][1],
@@ -138,26 +133,6 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
         }
 
         const is_load_event = /^dbot-load/.test(event.group);
-
-        if (is_both_higher_lower) {
-            const is_block_creation = event.type === window.Blockly.Events.BLOCK_CREATE && event.ids.includes(this.id);
-            const is_market_or_type_change =
-                event.type === window.Blockly.Events.BLOCK_CHANGE &&
-                ['TYPE_LIST', 'TRADETYPE_LIST', 'SYMBOL_LIST'].includes(event.name);
-            if (is_block_creation || is_market_or_type_change) {
-                this.updateBothDurationInputs(!is_load_event).then(() =>
-                    this.updateBothBarrierInputs(!is_load_event, !is_load_event)
-                );
-                if (event.name === 'SYMBOL_LIST' || event.name === 'TRADETYPE_LIST') this.updateAmountLimits();
-            } else if (event.type === window.Blockly.Events.BLOCK_CHANGE && event.blockId === this.id) {
-                if (['HIGHER_DURATIONTYPE_LIST', 'LOWER_DURATIONTYPE_LIST'].includes(event.name)) {
-                    this.updateBothBarrierInputs(false, false);
-                } else if (['BARRIEROFFSETTYPE_LIST', 'SECONDBARRIEROFFSETTYPE_LIST'].includes(event.name)) {
-                    this.updateBothBarrierInputs(false, true);
-                }
-            }
-            return;
-        }
 
         if (event.type === window.Blockly.Events.BLOCK_CREATE && event.ids.includes(this.id)) {
             if (is_load_event) {
@@ -191,17 +166,13 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
                     case 'BARRIEROFFSETTYPE_LIST':
                     case 'SECONDBARRIEROFFSETTYPE_LIST': {
                         this.updateBarrierInputs(false, true);
-                        if (!this.both_options_active) this.enforceSingleBarrierType(event.name, false);
+                        this.enforceSingleBarrierType(event.name, false);
                         break;
                     }
                     default:
                         break;
                 }
-            } else if (
-                event.name === 'SYMBOL_LIST' ||
-                event.name === 'TRADETYPE_LIST' ||
-                (event.name === 'TYPE_LIST' && was_both_higher_lower)
-            ) {
+            } else if (event.name === 'SYMBOL_LIST' || event.name === 'TRADETYPE_LIST') {
                 this.updateBarrierInputs(true, true);
                 this.enforceSingleBarrierType(event.name, true);
                 this.updateDurationInput(true, true);
@@ -244,13 +215,7 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
             const input_names = ['BARRIEROFFSET', 'SECONDBARRIEROFFSET'];
 
             for (let i = 0; i < barriers.values.length; i++) {
-                const label = this.both_options_active
-                    ? i === 0
-                        ? localize('HIGHER Barrier Offset')
-                        : localize('LOWER Barrier Offset')
-                    : barriers.values.length === 1
-                      ? localize('Barrier')
-                      : config().BARRIER_LABELS[i];
+                const label = barriers.values.length === 1 ? localize('Barrier') : config().BARRIER_LABELS[i];
                 let input = this.getInput(input_names[i]);
 
                 if (input) {
@@ -278,114 +243,6 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
             for (let i = input_names.length; i > barriers.values.length; i--) {
                 this.removeInput(input_names[i - 1], true);
             }
-            if (this.both_options_active && this.getInput('LOWER_DURATION_ROW')) {
-                this.moveInputBefore('BARRIEROFFSET', 'LOWER_DURATION_ROW');
-            }
-        });
-    },
-    updateBothDurationInputsVisibility(is_visible) {
-        if (
-            this.both_options_active === is_visible &&
-            (is_visible === !!this.getInput('HIGHER_DURATION_ROW')) &&
-            (is_visible === !!this.getInput('LOWER_DURATION_ROW'))
-        ) {
-            return;
-        }
-        runIrreversibleEvents(() => {
-            this.both_options_active = is_visible;
-            const duration_row = this.inputList[0];
-            duration_row?.setVisible(!is_visible);
-            if (is_visible) {
-                const definitions = [
-                    ['HIGHER', localize('HIGHER')],
-                    ['LOWER', localize('LOWER')],
-                ];
-                definitions.forEach(([side, label]) => {
-                    if (!this.getInput(`${side}_DURATION_ROW`)) {
-                        this.appendDummyInput(`${side}_DURATION_ROW`)
-                            .appendField(label)
-                            .appendField(localize('Duration:'))
-                            .appendField(new window.Blockly.FieldDropdown([['', '']]), `${side}_DURATIONTYPE_LIST`);
-                        const duration_input = this.appendValueInput(`${side}_DURATION`).setCheck('Number');
-                        const shadow_block = this.workspace.newBlock('math_number_positive');
-                        shadow_block.setShadow(true);
-                        shadow_block.setFieldValue(1, 'NUM');
-                        shadow_block.outputConnection.connect(duration_input.connection);
-                        shadow_block.initSvg();
-                        shadow_block.renderEfficiently();
-                    }
-                });
-            } else {
-                ['HIGHER', 'LOWER'].forEach(side => {
-                    this.removeInput(`${side}_DURATION`, true);
-                    this.removeInput(`${side}_DURATION_ROW`, true);
-                });
-            }
-        });
-    },
-    updateBothDurationInputs(should_use_default_unit) {
-        const { contracts_for } = ApiHelpers?.instance ?? {};
-        if (!contracts_for || !this.both_options_active) return Promise.resolve();
-        return contracts_for.getDurations(this.selected_symbol, this.selected_trade_type).then(durations => {
-            this.both_durations = durations;
-            this.durations = durations;
-            ['HIGHER', 'LOWER'].forEach(side => {
-                const dropdown = this.getField(`${side}_DURATIONTYPE_LIST`);
-                dropdown?.updateOptions(
-                    durations.map(duration => [duration.display, duration.unit]),
-                    { default_value: should_use_default_unit ? undefined : dropdown.getValue() }
-                );
-                const current_unit = dropdown?.getValue();
-                const min_duration = durations.find(duration => duration.unit === current_unit);
-                const target = this.getInput(`${side}_DURATION`)?.connection?.targetBlock();
-                if (min_duration && target?.isShadow() && should_use_default_unit) {
-                    runIrreversibleEvents(() => target.setFieldValue(min_duration.min, 'NUM'));
-                }
-            });
-        });
-    },
-    updateBothBarrierInputs(should_use_default_type, should_use_default_values) {
-        const { contracts_for } = ApiHelpers?.instance ?? {};
-        if (!contracts_for || !this.both_options_active) return;
-        const sides = [
-            { name: 'BARRIEROFFSET', unit: this.getFieldValue('HIGHER_DURATIONTYPE_LIST'), index: 0 },
-            { name: 'SECONDBARRIEROFFSET', unit: this.getFieldValue('LOWER_DURATIONTYPE_LIST'), index: 1 },
-        ];
-        Promise.all(
-            sides.map(side =>
-                contracts_for.getBarriers(
-                    this.selected_symbol,
-                    this.selected_trade_type,
-                    side.unit,
-                    side.index === 0
-                        ? [this.getFieldValue('BARRIEROFFSETTYPE_LIST') || config().BARRIER_TYPES[0][1]]
-                        : [
-                              config().BARRIER_TYPES[0][1],
-                              this.getFieldValue('SECONDBARRIEROFFSETTYPE_LIST') || config().BARRIER_TYPES[1][1],
-                          ]
-                )
-            )
-        ).then(results => {
-            this.createBarrierInputs({ values: results.map((result, index) => result.values[index] ?? false) });
-            sides.forEach((side, index) => {
-                const field_name = side.index === 0 ? 'BARRIEROFFSETTYPE_LIST' : 'SECONDBARRIEROFFSETTYPE_LIST';
-                const field = this.getField(field_name);
-                if (!field) return;
-                const barrier_result = results[index];
-                const options = barrier_result.allow_both_types || barrier_result.allow_absolute_type
-                    ? [].concat(config().BARRIER_TYPES, config().ABSOLUTE_BARRIER_DROPDOWN_OPTION)
-                    : config().BARRIER_TYPES;
-                field.updateOptions(options, {
-                    default_value: should_use_default_type ? config().BARRIER_TYPES[index][1] : field.getValue(),
-                });
-                if (should_use_default_values) {
-                    const target = this.getInput(side.name)?.connection?.targetBlock();
-                    const value = barrier_result.values[index];
-                    if (target?.isShadow() && value !== undefined && value !== false) {
-                        runIrreversibleEvents(() => target.setFieldValue(value, 'NUM'));
-                    }
-                }
-            });
         });
     },
     updateAmountLimits() {
@@ -563,10 +420,6 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
         }, 10);
     },
     updateBarrierInputs(should_use_default_type, should_use_default_values) {
-        if (this.both_options_active) {
-            this.updateBothBarrierInputs(should_use_default_type, should_use_default_values);
-            return;
-        }
         const { contracts_for } = ApiHelpers?.instance ?? {};
         if (!contracts_for) return;
 
@@ -676,9 +529,6 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
         const has_first_barrier = xmlElement.getAttribute('has_first_barrier') === 'true';
         const has_second_barrier = xmlElement.getAttribute('has_second_barrier') === 'true';
         const has_prediction = xmlElement.getAttribute('has_prediction') === 'true';
-        const has_both_durations = xmlElement.getAttribute('has_both_durations') === 'true';
-
-        if (has_both_durations) this.updateBothDurationInputsVisibility(true);
 
         if (has_first_barrier && has_second_barrier) {
             this.createBarrierInputs({ values: [1, -1] }); // These values are overwritten with XML values.
@@ -694,7 +544,6 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
         container.setAttribute('has_first_barrier', !!this.getInput('BARRIEROFFSET'));
         container.setAttribute('has_second_barrier', !!this.getInput('SECONDBARRIEROFFSET'));
         container.setAttribute('has_prediction', !!this.getInput('PREDICTION'));
-        container.setAttribute('has_both_durations', !!this.both_options_active);
 
         return container;
     },
@@ -721,7 +570,6 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
                 return !isNaN(input_number) && input_number <= 0;
             },
             DURATION: input => {
-                if (this.both_options_active) return false;
                 const input_number = Number(input);
 
                 if (isNaN(input_number) || !this.durations.length) {
@@ -751,23 +599,7 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
 
                 return false;
             },
-            HIGHER_DURATION: input => this.validateBothDuration(input, 'HIGHER'),
-            LOWER_DURATION: input => this.validateBothDuration(input, 'LOWER'),
         };
-    },
-    validateBothDuration(input, side) {
-        const input_number = Number(input);
-        const unit = this.getFieldValue(`${side}_DURATIONTYPE_LIST`);
-        const duration = this.both_durations?.find(item => item.unit === unit);
-        if (!duration || isNaN(input_number)) return false;
-        const valid = input_number >= duration.min && input_number <= duration.max;
-        if (!valid) {
-            this.error_message = localize('Duration value is not allowed. Please enter a value between {{min}} to {{max}}.', {
-                min: duration.min,
-                max: duration.max,
-            });
-        }
-        return !valid;
     },
 };
 
@@ -793,19 +625,6 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_tradeopt
     // are not affected by fractional values e.g. USD 12.232323 will become 12.23.
     const decimal_places = getDecimalPlaces(currency);
     const stake_amount = `+(Number(${amount}).toFixed(${decimal_places}))`;
-    const is_both_higher_lower = block.both_options_active;
-    const higher_duration_type = block.getFieldValue('HIGHER_DURATIONTYPE_LIST') || duration_type;
-    const lower_duration_type = block.getFieldValue('LOWER_DURATIONTYPE_LIST') || duration_type;
-    const higher_duration_value = window.Blockly.JavaScript.javascriptGenerator.valueToCode(
-        block,
-        'HIGHER_DURATION',
-        window.Blockly.JavaScript.javascriptGenerator.ORDER_ATOMIC
-    ) || duration_value;
-    const lower_duration_value = window.Blockly.JavaScript.javascriptGenerator.valueToCode(
-        block,
-        'LOWER_DURATION',
-        window.Blockly.JavaScript.javascriptGenerator.ORDER_ATOMIC
-    ) || duration_value;
 
     const getBarrierValue = (barrier_offset_type, value) => {
         // Variables should not be encapsulated in quotes
@@ -858,10 +677,6 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.trade_definition_tradeopt
             prediction         : ${prediction_value || 'undefined'},
             barrierOffset      : ${barrier_offset_value || 'undefined'},
             secondBarrierOffset: ${second_barrier_offset_value || 'undefined'},
-            higherDuration      : ${is_both_higher_lower ? higher_duration_value : 'undefined'},
-            higherDurationUnit  : ${is_both_higher_lower ? `'${higher_duration_type}'` : 'undefined'},
-            lowerDuration       : ${is_both_higher_lower ? lower_duration_value : 'undefined'},
-            lowerDurationUnit   : ${is_both_higher_lower ? `'${lower_duration_type}'` : 'undefined'},
             basis              : '${block.type === 'trade_definition_tradeoptions' ? 'stake' : 'payout'}',
         });
         BinaryBotPrivateHasCalledTradeOptions = true;
