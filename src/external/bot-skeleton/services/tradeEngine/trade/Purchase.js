@@ -7,6 +7,12 @@ import { BEFORE_PURCHASE } from './state/constants';
 
 let delayIndex = 0;
 let purchase_reference;
+const invertBarrierOffset = value => {
+    if (typeof value !== 'string') return value;
+    if (value.startsWith('+')) return `-${value.slice(1)}`;
+    if (value.startsWith('-')) return `+${value.slice(1)}`;
+    return value;
+};
 
 export default Engine =>
     class Purchase extends Engine {
@@ -42,9 +48,10 @@ export default Engine =>
                         const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
                         const trade_options = { ...this.tradeOptions };
                         if (type === 'HIGHER') {
+                            trade_options.barrierOffset = invertBarrierOffset(trade_options.barrierOffset);
                             trade_options.secondBarrierOffset = undefined;
                         } else if (type === 'LOWER') {
-                            trade_options.barrierOffset = this.tradeOptions.secondBarrierOffset;
+                            trade_options.barrierOffset = invertBarrierOffset(this.tradeOptions.secondBarrierOffset);
                             trade_options.secondBarrierOffset = undefined;
                         }
                         const trade_option = proposal ? null : tradeOptionToBuy(type, trade_options);
