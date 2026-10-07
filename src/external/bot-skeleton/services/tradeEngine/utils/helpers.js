@@ -4,11 +4,13 @@ import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
 
-const invertBarrierOffset = value => {
+export const scaleBothBarrierOffset = value => {
     if (typeof value !== 'string') return value;
-    if (value.startsWith('+')) return `-${value.slice(1)}`;
-    if (value.startsWith('-')) return `+${value.slice(1)}`;
-    return value;
+    const match = value.match(/^([+-])(\d+(?:\.\d+)?)$/);
+    if (!match) return value;
+
+    const scaled_value = (Number(match[2]) * 0.02).toFixed(10).replace(/\.?0+$/, '');
+    return `${match[1]}${scaled_value}`;
 };
 
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
@@ -18,10 +20,10 @@ export const tradeOptionToProposal = (trade_option, purchase_reference) =>
             trade_option.contractTypes.includes('HIGHER') && trade_option.contractTypes.includes('LOWER');
 
         if (is_both_higher_lower && type === 'HIGHER') {
-            contract_trade_option.barrierOffset = invertBarrierOffset(trade_option.barrierOffset);
+            contract_trade_option.barrierOffset = scaleBothBarrierOffset(trade_option.barrierOffset);
             contract_trade_option.secondBarrierOffset = undefined;
         } else if (is_both_higher_lower && type === 'LOWER') {
-            contract_trade_option.barrierOffset = invertBarrierOffset(trade_option.secondBarrierOffset);
+            contract_trade_option.barrierOffset = scaleBothBarrierOffset(trade_option.secondBarrierOffset);
             contract_trade_option.secondBarrierOffset = undefined;
         }
 
