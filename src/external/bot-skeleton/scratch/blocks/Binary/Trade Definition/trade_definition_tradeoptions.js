@@ -109,6 +109,7 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
 
         const market_block = trade_definition_block.getChildByType('trade_definition_market');
         const trade_type_block = trade_definition_block.getChildByType('trade_definition_tradetype');
+        const contract_type_block = trade_definition_block.getChildByType('trade_definition_contracttype');
 
         if (!market_block || !trade_type_block) {
             return;
@@ -118,6 +119,8 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
         this.selected_market = market_block.getFieldValue('MARKET_LIST');
         this.selected_trade_type_category = trade_type_block.getFieldValue('TRADETYPECAT_LIST');
         this.selected_trade_type = trade_type_block.getFieldValue('TRADETYPE_LIST');
+        this.both_options_active =
+            contract_type_block?.getFieldValue('TYPE_LIST') === 'both' && this.selected_trade_type === 'higherlower';
         this.selected_duration = this.getFieldValue('DURATIONTYPE_LIST');
         this.selected_barrier_types = [
             this.getFieldValue('BARRIEROFFSETTYPE_LIST') || config().BARRIER_TYPES[0][1],
@@ -143,7 +146,7 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
                 this.updateAmountLimits();
             } else {
                 this.updateBarrierInputs(true, true);
-                this.enforceSingleBarrierType('BARRIEROFFSETTYPE_LIST', true);
+                if (!this.both_options_active) this.enforceSingleBarrierType('BARRIEROFFSETTYPE_LIST', true);
                 this.updateDurationInput(true, true);
                 this.updatePredictionInput(true);
             }
@@ -151,7 +154,7 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
             if (is_load_event) {
                 if (event.name === 'TRADETYPE_LIST') {
                     this.updateBarrierInputs(false, false);
-                    this.enforceSingleBarrierType(event.name, true);
+                    if (!this.both_options_active) this.enforceSingleBarrierType(event.name, true);
                     this.updateDurationInput(false, false);
                     this.updatePredictionInput(false);
                 }
@@ -159,22 +162,24 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
                 switch (event.name) {
                     case 'DURATIONTYPE_LIST': {
                         this.updateBarrierInputs(true, true);
-                        this.enforceSingleBarrierType('BARRIEROFFSETTYPE_LIST', true);
+                        if (!this.both_options_active) this.enforceSingleBarrierType('BARRIEROFFSETTYPE_LIST', true);
                         this.updateDurationInput(false, true);
                         break;
                     }
                     case 'BARRIEROFFSETTYPE_LIST':
                     case 'SECONDBARRIEROFFSETTYPE_LIST': {
                         this.updateBarrierInputs(false, true);
-                        this.enforceSingleBarrierType(event.name, false);
+                        if (!this.both_options_active) this.enforceSingleBarrierType(event.name, false);
                         break;
                     }
                     default:
                         break;
                 }
+            } else if (event.name === 'TYPE_LIST') {
+                this.updateBarrierInputs(true, true);
             } else if (event.name === 'SYMBOL_LIST' || event.name === 'TRADETYPE_LIST') {
                 this.updateBarrierInputs(true, true);
-                this.enforceSingleBarrierType(event.name, true);
+                if (!this.both_options_active) this.enforceSingleBarrierType(event.name, true);
                 this.updateDurationInput(true, true);
                 this.updatePredictionInput(true);
                 this.updateAmountLimits();
@@ -215,7 +220,13 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
             const input_names = ['BARRIEROFFSET', 'SECONDBARRIEROFFSET'];
 
             for (let i = 0; i < barriers.values.length; i++) {
-                const label = barriers.values.length === 1 ? localize('Barrier') : config().BARRIER_LABELS[i];
+                const label = this.both_options_active
+                    ? i === 0
+                        ? localize('HIGHER Barrier')
+                        : localize('LOWER Barrier')
+                    : barriers.values.length === 1
+                      ? localize('Barrier')
+                      : config().BARRIER_LABELS[i];
                 let input = this.getInput(input_names[i]);
 
                 if (input) {
@@ -425,59 +436,76 @@ window.Blockly.Blocks.trade_definition_tradeoptions = {
 
         const { BARRIER_TYPES } = config();
 
-        contracts_for
-            .getBarriers(
+        const getBarriers = barrier_types =>
+            contracts_for.getBarriers(
                 this.selected_symbol,
                 this.selected_trade_type,
                 this.selected_duration,
-                this.selected_barrier_types
-            )
-            .then(barriers => {
-                this.createBarrierInputs(barriers);
+                barrier_types
+            );
+        const barriers_request = this.both_options_active
+            ? Promise.all(this.selected_barrier_types.map(barrier_type => getBarriers([barrier_type]))).then(
+                  ([higher_barrier, lower_barrier]) => ({
+                      values: [higher_barrier.values[0], lower_barrier.values[0]],
+                      allow_both_types: [higher_barrier.allow_both_types, lower_barrier.allow_both_types],
+                      allow_absolute_type: [higher_barrier.allow_absolute_type, lower_barrier.allow_absolute_type],
+                  })
+              )
+            : getBarriers(this.selected_barrier_types);
 
-                const input_names = ['BARRIEROFFSET', 'SECONDBARRIEROFFSET'];
+        barriers_request.then(barriers => {
+            this.createBarrierInputs(barriers);
 
-                for (let i = 0; i < barriers.values.length; i++) {
-                    const barrier_field_dropdown = this.getField(`${input_names[i]}TYPE_LIST`);
-                    const { ABSOLUTE_BARRIER_DROPDOWN_OPTION } = config();
-                    const barrier_field_value = should_use_default_type
-                        ? BARRIER_TYPES[i][1]
-                        : barrier_field_dropdown.getValue();
+            const input_names = ['BARRIEROFFSET', 'SECONDBARRIEROFFSET'];
 
-                    if (this.selected_duration === 'd') {
-                        // Only absolute types are allowed.
-                        barrier_field_dropdown.updateOptions(ABSOLUTE_BARRIER_DROPDOWN_OPTION, {
-                            default_value: 'absolute',
+            for (let i = 0; i < barriers.values.length; i++) {
+                const barrier_field_dropdown = this.getField(`${input_names[i]}TYPE_LIST`);
+                const { ABSOLUTE_BARRIER_DROPDOWN_OPTION } = config();
+                const barrier_field_value = should_use_default_type
+                    ? BARRIER_TYPES[i][1]
+                    : barrier_field_dropdown.getValue();
+
+                if (this.selected_duration === 'd') {
+                    // Only absolute types are allowed.
+                    barrier_field_dropdown.updateOptions(ABSOLUTE_BARRIER_DROPDOWN_OPTION, {
+                        default_value: 'absolute',
+                    });
+                } else if (
+                    (Array.isArray(barriers.allow_both_types)
+                        ? barriers.allow_both_types[i]
+                        : barriers.allow_both_types) ||
+                    (Array.isArray(barriers.allow_absolute_type)
+                        ? barriers.allow_absolute_type[i]
+                        : barriers.allow_absolute_type)
+                ) {
+                    // Both offset + absolute types are allowed.
+                    const options = [].concat(BARRIER_TYPES, ABSOLUTE_BARRIER_DROPDOWN_OPTION);
+
+                    barrier_field_dropdown.updateOptions(options, {
+                        default_value: barrier_field_value,
+                    });
+                } else {
+                    // Only offset types are allowed.
+                    barrier_field_dropdown.updateOptions(BARRIER_TYPES, {
+                        default_value: barrier_field_value,
+                    });
+                }
+
+                const { connection } = this.getInput(input_names[i]);
+
+                if (should_use_default_values && connection) {
+                    const target_block = connection.targetBlock();
+
+                    if (target_block && target_block.isShadow()) {
+                        const barrier_value = barriers.values[i] !== false ? barriers.values[i] : '';
+
+                        runIrreversibleEvents(() => {
+                            target_block.setFieldValue(barrier_value, 'NUM');
                         });
-                    } else if (barriers.allow_both_types || barriers.allow_absolute_type) {
-                        // Both offset + absolute types are allowed.
-                        const options = [].concat(BARRIER_TYPES, ABSOLUTE_BARRIER_DROPDOWN_OPTION);
-
-                        barrier_field_dropdown.updateOptions(options, {
-                            default_value: barrier_field_value,
-                        });
-                    } else {
-                        // Only offset types are allowed.
-                        barrier_field_dropdown.updateOptions(BARRIER_TYPES, {
-                            default_value: barrier_field_value,
-                        });
-                    }
-
-                    const { connection } = this.getInput(input_names[i]);
-
-                    if (should_use_default_values && connection) {
-                        const target_block = connection.targetBlock();
-
-                        if (target_block && target_block.isShadow()) {
-                            const barrier_value = barriers.values[i] !== false ? barriers.values[i] : '';
-
-                            runIrreversibleEvents(() => {
-                                target_block.setFieldValue(barrier_value, 'NUM');
-                            });
-                        }
                     }
                 }
-            });
+            }
+        });
     },
     updatePredictionInput(should_use_default_value) {
         const { contracts_for } = ApiHelpers?.instance ?? {};

@@ -36,31 +36,43 @@ export default Engine =>
 
                 // Start both requests in this same execution turn; independent API requests
                 // cannot guarantee an identical market entry spot.
-                const purchases = contract_types.map(type => {
-                    const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
-                    const trade_options = { ...this.tradeOptions };
-                    if (type === 'HIGHER') {
-                        trade_options.secondBarrierOffset = undefined;
-                    } else if (type === 'LOWER') {
-                        trade_options.barrierOffset = this.tradeOptions.secondBarrierOffset;
-                        trade_options.secondBarrierOffset = undefined;
-                    }
-                    const trade_option = proposal ? null : tradeOptionToBuy(type, trade_options);
-                    const action = () =>
-                        proposal
-                            ? api_base.api.send({ buy: proposal.id, price: proposal.askPrice })
-                            : api_base.api.send(trade_option);
+                let purchase_requests;
+                try {
+                    purchase_requests = contract_types.map(type => {
+                        const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
+                        const trade_options = { ...this.tradeOptions };
+                        if (type === 'HIGHER') {
+                            trade_options.secondBarrierOffset = undefined;
+                        } else if (type === 'LOWER') {
+                            trade_options.barrierOffset = this.tradeOptions.secondBarrierOffset;
+                            trade_options.secondBarrierOffset = undefined;
+                        }
+                        const trade_option = proposal ? null : tradeOptionToBuy(type, trade_options);
+                        const action = () =>
+                            proposal
+                                ? api_base.api.send({ buy: proposal.id, price: proposal.askPrice })
+                                : api_base.api.send(trade_option);
 
+                        return { type, action };
+                    });
+                } catch (error) {
+                    this.$scope?.observer?.emit('Error', error?.error || error);
+                    return Promise.reject(error);
+                }
+
+                const purchases = purchase_requests.map(({ type, action }) => {
                     return doUntilDone(action).then(response => {
                         const buy = response?.buy;
-                        if (buy?.contract_id) {
-                            this.contractsByType[type] = {
-                                contract_id: buy.contract_id,
-                                contract_type: type,
-                                buy,
-                            };
-                            this.contractIds.push(buy.contract_id);
+                        if (!buy?.contract_id) {
+                            throw new Error(`${type} buy response has no contract_id`);
                         }
+
+                        this.contractsByType[type] = {
+                            contract_id: buy.contract_id,
+                            contract_type: type,
+                            buy,
+                        };
+                        this.contractIds.push(buy.contract_id);
                         return { type, response };
                     });
                 });
@@ -72,18 +84,19 @@ export default Engine =>
                     successes.forEach(result => {
                         const { type, response } = result.value;
                         const buy = response?.buy;
-                        if (!buy?.contract_id) {
-                            failures.push({ status: 'rejected', reason: new Error(`${type} buy response has no contract_id`) });
-                            return;
-                        }
-
                         contractStatus({ id: 'contract.purchase_received', data: buy.transaction_id, buy });
                         log(LogTypes.PURCHASE, { longcode: buy.longcode, transaction_id: buy.transaction_id });
                     });
 
-                    if (this.contractIds.length === 0) {
-                        const error = failures[0]?.reason || new Error('Both purchase failed');
-                        this.$scope?.observer?.emit('Error', error?.error || error);
+                    if (failures.length > 0 || successes.length !== contract_types.length) {
+                        const error = failures[0]?.reason || new Error('Both purchase did not complete successfully');
+                        failures.forEach(result => {
+                            const failure = result.reason?.error || result.reason;
+                            // eslint-disable-next-line no-console
+                            console.error('[Both] Contract purchase failed:', failure);
+                            this.$scope?.observer?.emit('Error', failure);
+                        });
+                        if (failures.length === 0) this.$scope?.observer?.emit('Error', error);
                         return Promise.reject(error);
                     }
 
@@ -92,13 +105,6 @@ export default Engine =>
                     delayIndex = 0;
                     this.store.dispatch(purchaseSuccessful());
                     this.checkBothContracts();
-
-                    failures.forEach(result => {
-                        const error = result.reason?.error || result.reason;
-                        // eslint-disable-next-line no-console
-                        console.error('[Both] One contract purchase failed:', error);
-                        this.$scope?.observer?.emit('Error', error);
-                    });
 
                     return successes.map(result => result.value.response);
                 });
