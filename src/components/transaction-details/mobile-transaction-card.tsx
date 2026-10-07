@@ -108,7 +108,7 @@ export default function MobileTransactionCards({ transaction }: { transaction: T
                     loader={!transaction.entry_tick}
                 />
             </div>
-            <div className={${PARENT_CLASS}__card__row}>
+            <div className={`${PARENT_CLASS}__card__row`}>
     <CardColumn title='Barrier' label={transaction?.barrier || '-'} right_aligned />
 </div>
             <div className={`${PARENT_CLASS}__card__row`}>
