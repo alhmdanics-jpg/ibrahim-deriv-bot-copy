@@ -9,18 +9,21 @@ import { expectPositiveInteger } from '../utils/sanitize';
 import * as constants from './state/constants';
 
 let tickListenerKey;
+let tickListenerSymbol;
 
 export default Engine =>
     class Ticks extends Engine {
         async watchTicks(symbol) {
             if (symbol && this.symbol !== symbol) {
-                this.symbol = symbol;
                 const { ticksService } = this.$scope;
 
-                await ticksService.stopMonitor({
-                    symbol,
-                    key: tickListenerKey,
-                });
+                if (tickListenerSymbol && tickListenerKey) {
+                    await ticksService.stopMonitor({
+                        symbol: tickListenerSymbol,
+                        key: tickListenerKey,
+                    });
+                }
+                this.symbol = symbol;
                 const callback = ticks => {
                     if (this.is_proposal_subscription_required) {
                         this.checkProposalReady();
@@ -32,6 +35,7 @@ export default Engine =>
 
                 const key = await ticksService.monitor({ symbol, callback });
                 tickListenerKey = key;
+                tickListenerSymbol = symbol;
             }
         }
 

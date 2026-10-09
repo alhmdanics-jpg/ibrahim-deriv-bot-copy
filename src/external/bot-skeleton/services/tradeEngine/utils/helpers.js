@@ -9,7 +9,7 @@ export const scaleBothBarrierOffset = value => {
     const match = value.match(/^([+-])(\d+(?:\.\d+)?)$/);
     if (!match) return value;
 
-    const scaled_value = (Number(match[2]) * 0.02).toFixed(10).replace(/\.?0+$/, '');
+    const scaled_value = (Number(match[2]) * 0.02).toFixed(2);
     return `${match[1]}${scaled_value}`;
 };
 
