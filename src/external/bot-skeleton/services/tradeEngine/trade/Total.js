@@ -73,11 +73,12 @@ export default Engine =>
             contracts.forEach(contract => this.updateTotals(contract));
         }
 
-        updateAndReturnTotalRuns() {
-            this.sessionRuns++;
+        updateAndReturnTotalRuns(run_count = 1) {
+            this.sessionRuns += run_count;
             const accountStat = this.getAccountStat();
 
-            return ++accountStat.totalRuns;
+            accountStat.totalRuns += run_count;
+            return accountStat.totalRuns;
         }
 
         /* eslint-disable class-methods-use-this */

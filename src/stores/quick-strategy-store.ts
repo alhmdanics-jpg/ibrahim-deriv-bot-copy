@@ -145,9 +145,21 @@ export default class QuickStrategyStore implements IQuickStrategyStore {
     onSubmit = async (data: TFormData) => {
         const { contracts_for } = ApiHelpers?.instance ?? {};
         if (!contracts_for) return;
-        const market = await contracts_for.getMarketBySymbol(data.symbol);
-        const submarket = await contracts_for.getSubmarketBySymbol(data.symbol);
-        const trade_type_cat = await contracts_for.getTradeTypeCategoryByTradeType(data.tradetype);
+        const effective_data =
+            this.selected_strategy === 'VIDEO_PAIR'
+                ? {
+                      ...data,
+                      symbol: '1HZ100V',
+                      tradetype: 'higherlower',
+                      type: 'both',
+                      durationtype: 't',
+                      duration: 5,
+                      stake: '5',
+                  }
+                : data;
+        const market = await contracts_for.getMarketBySymbol(effective_data.symbol);
+        const submarket = await contracts_for.getSubmarketBySymbol(effective_data.symbol);
+        const trade_type_cat = await contracts_for.getTradeTypeCategoryByTradeType(effective_data.tradetype);
         const selected_strategy = STRATEGIES()[this.selected_strategy];
         const strategy_xml = await import(/* webpackChunkName: `[request]` */ `../xml/${selected_strategy.name}.xml`);
         const strategy_dom = window.Blockly.utils.xml.textToDom(strategy_xml.default);
@@ -173,7 +185,7 @@ export default class QuickStrategyStore implements IQuickStrategyStore {
                 el_block.innerHTML = value;
             });
         };
-        const { unit, action, type, growth_rate, ...rest_data } = data;
+        const { unit, action, type, growth_rate, ...rest_data } = effective_data;
         const fields_to_update = {
             market,
             submarket,

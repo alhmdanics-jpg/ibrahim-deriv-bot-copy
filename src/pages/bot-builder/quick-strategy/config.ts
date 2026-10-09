@@ -297,6 +297,21 @@ const LAST_DIGIT_PREDICTION = (): TConfigItem => ({
 });
 
 export const STRATEGIES = (): TStrategies => ({
+    VIDEO_PAIR: {
+        name: 'higher_lower_pair',
+        label: localize('Higher/Lower Pair'),
+        description: [
+            {
+                type: 'text',
+                content: [
+                    localize('Volatility 100 (1s): one Higher and one Lower contract per pair.'),
+                    localize('Stake: 5 USD per contract. Duration: 5 ticks per contract.'),
+                    localize('Higher and Lower offsets: 1 each.'),
+                ],
+            },
+        ],
+        fields: [],
+    },
     MARTINGALE: {
         name: 'martingale_max-stake',
         label: localize('Martingale'),

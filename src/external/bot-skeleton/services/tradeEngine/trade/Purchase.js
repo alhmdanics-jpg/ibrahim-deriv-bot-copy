@@ -102,7 +102,7 @@ export default Engine =>
                     }
 
                     this.bothPurchasesSettled = true;
-                    this.updateAndReturnTotalRuns();
+                    this.updateAndReturnTotalRuns(contract_types.length);
                     delayIndex = 0;
                     this.store.dispatch(purchaseSuccessful());
                     this.checkBothContracts();

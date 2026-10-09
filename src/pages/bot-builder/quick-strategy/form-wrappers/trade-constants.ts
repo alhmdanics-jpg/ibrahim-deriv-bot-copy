@@ -32,6 +32,12 @@ export type TStrategyTradeAssociations = Array<TTStrategyTradeAssociation>;
 
 export const STRATEGY_TRADE_ASSOCIATIONS: TStrategyTradeAssociations = [
     {
+        name: 'VIDEO_PAIR',
+        display_name: STRATEGIES().VIDEO_PAIR.label,
+        id: 14,
+        parent: [localize('Options')],
+    },
+    {
         name: 'MARTINGALE',
         display_name: STRATEGIES().MARTINGALE.label,
         id: 0,
