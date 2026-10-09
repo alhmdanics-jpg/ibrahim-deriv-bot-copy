@@ -1,6 +1,11 @@
 import { getRoundedNumber } from '@/components/shared';
 import { api_base } from '../../api/api-base';
-import { contract as broadcastContract, contractStatus } from '../utils/broadcast';
+import {
+    contract as broadcastContract,
+    contractStatus,
+    getPairFinalContractDiagnostic,
+    pairDiagnostic,
+} from '../utils/broadcast';
 import { openContractReceived, sell } from './state/actions';
 
 export default Engine =>
@@ -74,6 +79,17 @@ export default Engine =>
                 const settledContracts = this.contractIds.map(id => this.contractStates[id]);
                 this.updateTotalsForContracts(settledContracts);
                 settledContracts.forEach(settledContract => {
+                    const project_contract_type = Object.keys(this.contractsByType ?? {}).find(
+                        type => this.contractsByType[type]?.contract_id === settledContract.contract_id
+                    );
+                    pairDiagnostic({
+                        event: 'contract_final',
+                        pair_id: this.pairDiagnosticId,
+                        contract_type: project_contract_type || settledContract.contract_type,
+                        contract_id: settledContract.contract_id,
+                        returned: getPairFinalContractDiagnostic(settledContract),
+                    });
+
                     contractStatus({
                         id: 'contract.sold',
                         data: settledContract.transaction_ids?.sell,

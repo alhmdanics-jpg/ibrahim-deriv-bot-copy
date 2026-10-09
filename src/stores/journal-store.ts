@@ -47,6 +47,7 @@ export interface IJournalStore {
     unfiltered_messages: TMessageItem[];
     toggleFilterDialog: () => void;
     onLogSuccess: (message: TlogSuccess) => void;
+    onDiagnostic: (message: string) => void;
     onError: (message: Error | string) => void;
     onNotify: (data: TNotifyData) => void;
     pushMessage: (message: string, message_type: string, className: string, extra?: TExtra) => void;
@@ -72,6 +73,7 @@ export default class JournalStore {
             unfiltered_messages: observable.shallow,
             toggleFilterDialog: action.bound,
             onLogSuccess: action.bound,
+            onDiagnostic: action.bound,
             onError: action.bound,
             onNotify: action.bound,
             pushMessage: action.bound,
@@ -128,6 +130,10 @@ export default class JournalStore {
     onLogSuccess(message: TlogSuccess) {
         const { log_type, extra } = message;
         this.pushMessage(log_type, MessageTypes.SUCCESS, '', extra);
+    }
+
+    onDiagnostic(message: string) {
+        this.pushMessage(message, MessageTypes.NOTIFY, 'journal__text');
     }
 
     onError(message: Error | string) {

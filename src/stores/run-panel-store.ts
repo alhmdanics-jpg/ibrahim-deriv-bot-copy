@@ -720,6 +720,7 @@ export default class RunPanelStore {
         observer.register('ui.log.error', this.showErrorMessage);
         observer.register('ui.log.notify', journal.onNotify);
         observer.register('ui.log.success', journal.onLogSuccess);
+        observer.register('ui.log.diagnostic', journal.onDiagnostic);
         observer.register('client.invalid_token', this.handleInvalidToken);
     };
 
@@ -737,6 +738,7 @@ export default class RunPanelStore {
         observer.unregisterAll('ui.log.error');
         observer.unregisterAll('ui.log.notify');
         observer.unregisterAll('ui.log.success');
+        observer.unregisterAll('ui.log.diagnostic');
         observer.unregisterAll('client.invalid_token');
     };
 

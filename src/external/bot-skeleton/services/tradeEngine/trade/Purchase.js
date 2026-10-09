@@ -1,6 +1,13 @@
 import { LogTypes } from '../../../constants/messages';
 import { api_base } from '../../api/api-base';
-import { contractStatus, info, log } from '../utils/broadcast';
+import {
+    contractStatus,
+    getPairBuyRequestDiagnostic,
+    getPairBuyResponseDiagnostic,
+    info,
+    log,
+    pairDiagnostic,
+} from '../utils/broadcast';
 import { doUntilDone, getUUID, recoverFromError, scaleBothBarrierOffset, tradeOptionToBuy } from '../utils/helpers';
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
@@ -27,6 +34,9 @@ export default Engine =>
                     return Promise.reject(new Error('Both requires two distinct contract types'));
                 }
 
+                const pair_diagnostic_id = getUUID();
+                this.pairDiagnosticId = pair_diagnostic_id;
+
                 this.isSold = false;
                 this.contractId = '';
                 this.bothResultProcessed = false;
@@ -49,10 +59,20 @@ export default Engine =>
                             trade_options.secondBarrierOffset = undefined;
                         }
                         const trade_option = proposal ? null : tradeOptionToBuy(type, trade_options);
-                        const action = () =>
-                            proposal
+                        const action = () => {
+                            if (!proposal) {
+                                pairDiagnostic({
+                                    event: 'buy_request',
+                                    pair_id: pair_diagnostic_id,
+                                    contract_type: type,
+                                    sent: getPairBuyRequestDiagnostic(trade_option),
+                                });
+                            }
+
+                            return proposal
                                 ? api_base.api.send({ buy: proposal.id, price: proposal.askPrice })
                                 : api_base.api.send(trade_option);
+                        };
 
                         return { type, action };
                     });
@@ -64,6 +84,17 @@ export default Engine =>
                 const purchases = purchase_requests.map(({ type, action }) => {
                     return doUntilDone(action).then(response => {
                         const buy = response?.buy;
+
+                        if (buy) {
+                            pairDiagnostic({
+                                event: 'buy_response',
+                                pair_id: pair_diagnostic_id,
+                                contract_type: type,
+                                contract_id: buy.contract_id,
+                                returned: getPairBuyResponseDiagnostic(buy),
+                            });
+                        }
+
                         if (!buy?.contract_id) {
                             throw new Error(`${type} buy response has no contract_id`);
                         }
