@@ -50,12 +50,12 @@
             <field name="NUM">5</field>
           </shadow>
         </value>
-        <value name="BARRIEROFFSET">
+        <value name="BARRIEROFFSET" strategy_value="higher_barrier_offset">
           <shadow type="math_number_positive" id="hl_pair_higher_offset">
             <field name="NUM">1</field>
           </shadow>
         </value>
-        <value name="SECONDBARRIEROFFSET">
+        <value name="SECONDBARRIEROFFSET" strategy_value="lower_barrier_offset">
           <shadow type="math_number_positive" id="hl_pair_lower_offset">
             <field name="NUM">1</field>
           </shadow>

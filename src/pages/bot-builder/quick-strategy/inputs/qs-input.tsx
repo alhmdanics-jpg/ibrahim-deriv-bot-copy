@@ -236,19 +236,6 @@ const QSInput: React.FC<TQSInput> = observer(
                 value = Math.floor(Number(value));
             }
 
-            // For all number fields, prevent decimal values less than 1
-            if (
-                is_number &&
-                typeof value === 'number' &&
-                value < 1 &&
-                !Number.isInteger(value) &&
-                name !== 'stake' &&
-                name !== 'max_stake' &&
-                name !== 'take_profit'
-            ) {
-                value = 1;
-            }
-
             // For stake field, check if value is within the allowed range
             if (name === 'stake' && is_number) {
                 const min_stake = (quick_strategy?.additional_data as any)?.min_stake || 0.35;
@@ -364,6 +351,9 @@ const QSInput: React.FC<TQSInput> = observer(
                                             { highlight: loss_threshold_warning_data?.highlight_field?.includes(name) }
                                         )}
                                         type={type}
+                                        preserve_decimal_input={
+                                            name === 'higher_barrier_offset' || name === 'lower_barrier_offset'
+                                        }
                                         leading_icon={
                                             is_number ? (
                                                 <button

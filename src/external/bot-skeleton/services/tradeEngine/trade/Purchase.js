@@ -8,7 +8,7 @@ import {
     log,
     pairDiagnostic,
 } from '../utils/broadcast';
-import { doUntilDone, getUUID, recoverFromError, scaleBothBarrierOffset, tradeOptionToBuy } from '../utils/helpers';
+import { doUntilDone, getPairTradeOptionsForContract, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
 
@@ -50,14 +50,7 @@ export default Engine =>
                 try {
                     purchase_requests = contract_types.map(type => {
                         const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
-                        const trade_options = { ...this.tradeOptions };
-                        if (type === 'HIGHER') {
-                            trade_options.barrierOffset = scaleBothBarrierOffset(trade_options.barrierOffset);
-                            trade_options.secondBarrierOffset = undefined;
-                        } else if (type === 'LOWER') {
-                            trade_options.barrierOffset = scaleBothBarrierOffset(this.tradeOptions.secondBarrierOffset);
-                            trade_options.secondBarrierOffset = undefined;
-                        }
+                        const trade_options = getPairTradeOptionsForContract(this.tradeOptions, type);
                         const trade_option = proposal ? null : tradeOptionToBuy(type, trade_options);
                         const action = () => {
                             if (!proposal) {

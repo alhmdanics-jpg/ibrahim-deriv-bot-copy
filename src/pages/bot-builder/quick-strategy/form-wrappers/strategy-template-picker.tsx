@@ -3,6 +3,7 @@ import { useFormikContext } from 'formik';
 import { observer } from 'mobx-react-lite';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
+import { getSavedQuickStrategyValues } from '@/stores/quick-strategy-utils';
 import { LegacyGuide1pxIcon } from '@deriv/quill-icons';
 import { Chip } from '@deriv-com/quill-ui';
 import { SearchField } from '@deriv-com/quill-ui-next';
@@ -21,7 +22,7 @@ const StrategyTemplatePicker = observer(({ setCurrentStep, setSelectedTradeType 
     const { dashboard, quick_strategy } = useStore();
     const { setActiveTabTutorial, setActiveTab, setFAQSearchValue, filterTuotrialTab } = dashboard;
     const { setFormVisibility, setSelectedStrategy } = quick_strategy;
-    const { setFieldValue } = useFormikContext<TFormData>();
+    const { setFieldValue, touched, values } = useFormikContext<TFormData>();
 
     const [selector_chip_value, setSelectorChipValue] = React.useState(0);
     const [is_searching, setIsSearching] = React.useState(false);
@@ -43,7 +44,26 @@ const StrategyTemplatePicker = observer(({ setCurrentStep, setSelectedTradeType 
             min_stake: null,
         });
 
-        setFieldValue('stake', strategy === 'VIDEO_PAIR' ? '5' : '1', true);
+        if (strategy === 'VIDEO_PAIR') {
+            const saved_values: TFormData = getSavedQuickStrategyValues();
+
+            const setTemplateValue = (name: keyof TFormData, default_value: string) => {
+                const has_saved_value = Object.prototype.hasOwnProperty.call(saved_values, name);
+                const value = has_saved_value || touched[name] ? values[name] : default_value;
+                setFieldValue(name, value, true);
+                quick_strategy.setValue(name, value);
+            };
+
+            setTemplateValue('stake', '5');
+            setFieldValue('tradetype', 'higherlower', true);
+            setTemplateValue('durationtype', 't');
+            setTemplateValue('duration', '5');
+            setTemplateValue('higher_barrier_offset', '1');
+            setTemplateValue('lower_barrier_offset', '-1');
+            quick_strategy.setValue('tradetype', 'higherlower');
+        } else {
+            setFieldValue('stake', '1', true);
+        }
 
         setCurrentStep(QsSteps.StrategyVerified);
     };

@@ -26,6 +26,7 @@ export type TInputProps = {
     leading_icon?: React.ReactElement;
     max_characters?: number;
     maxLength?: number;
+    preserve_decimal_input?: boolean;
     name?: string;
     onBlur?: React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement>;
     onChange?: React.ChangeEventHandler<HTMLInputElement | HTMLTextAreaElement>;
@@ -88,6 +89,7 @@ const Input = React.forwardRef<HTMLInputElement & HTMLTextAreaElement, TInputPro
             warn,
             data_testId,
             maxLength,
+            preserve_decimal_input = false,
             placeholder,
             ...props
         },
@@ -112,8 +114,8 @@ const Input = React.forwardRef<HTMLInputElement & HTMLTextAreaElement, TInputPro
                     input_value = input_value.substring(0, decimal_index);
                 }
             }
-            // For other inputs, limit to 2 decimal places
-            else {
+            // For other inputs, limit to 2 decimal places unless the caller needs the raw value.
+            else if (!preserve_decimal_input) {
                 const decimal_index = input_value.indexOf('.');
                 if (decimal_index !== -1) {
                     const decimal_part = input_value.substring(decimal_index + 1);

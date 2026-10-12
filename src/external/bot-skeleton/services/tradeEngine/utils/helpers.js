@@ -4,28 +4,35 @@ import { localize } from '@deriv-com/translations';
 import { observer as globalObserver } from '../../../utils/observer';
 import { error as logError } from './broadcast';
 
-export const scaleBothBarrierOffset = value => {
+export const formatBarrierOffset = value => {
     if (typeof value !== 'string') return value;
-    const match = value.match(/^([+-])(\d+(?:\.\d+)?)$/);
-    if (!match) return value;
+    const match = value.match(/^([+-]?)(\d+(?:\.\d+)?)$/);
+    if (!match || (match[2].split('.')[1]?.length ?? 0) <= 2) return value;
 
-    const scaled_value = (Number(match[2]) * 0.02).toFixed(2);
-    return `${match[1]}${scaled_value}`;
+    return `${match[1]}${Number(match[2]).toFixed(2)}`;
+};
+
+export const getPairTradeOptionsForContract = (trade_option, contract_type) => {
+    const contract_trade_option = { ...trade_option };
+
+    if (contract_type === 'HIGHER') {
+        contract_trade_option.barrierOffset = formatBarrierOffset(trade_option.barrierOffset);
+        contract_trade_option.secondBarrierOffset = undefined;
+    } else if (contract_type === 'LOWER') {
+        contract_trade_option.barrierOffset = formatBarrierOffset(trade_option.secondBarrierOffset);
+        contract_trade_option.secondBarrierOffset = undefined;
+    }
+
+    return contract_trade_option;
 };
 
 export const tradeOptionToProposal = (trade_option, purchase_reference) =>
     trade_option.contractTypes.map(type => {
-        const contract_trade_option = { ...trade_option };
         const is_both_higher_lower =
             trade_option.contractTypes.includes('HIGHER') && trade_option.contractTypes.includes('LOWER');
-
-        if (is_both_higher_lower && type === 'HIGHER') {
-            contract_trade_option.barrierOffset = scaleBothBarrierOffset(trade_option.barrierOffset);
-            contract_trade_option.secondBarrierOffset = undefined;
-        } else if (is_both_higher_lower && type === 'LOWER') {
-            contract_trade_option.barrierOffset = scaleBothBarrierOffset(trade_option.secondBarrierOffset);
-            contract_trade_option.secondBarrierOffset = undefined;
-        }
+        const contract_trade_option = is_both_higher_lower
+            ? getPairTradeOptionsForContract(trade_option, type)
+            : { ...trade_option };
 
         const proposal = {
             amount: contract_trade_option.amount,

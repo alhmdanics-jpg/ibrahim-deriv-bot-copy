@@ -7,6 +7,7 @@ import Modal from '@/components/shared_ui/modal';
 import Text from '@/components/shared_ui/text';
 import { config as qs_config } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
+import { getSavedQuickStrategyValues, saveQuickStrategyValues } from '@/stores/quick-strategy-utils';
 import { localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
 import { rudderStackSendCloseEvent } from '../../../analytics/rudderstack-common-events';
@@ -52,13 +53,7 @@ const FormikWrapper: React.FC<TFormikWrapper> = observer(({ children }) => {
     let initial_value: TFormData | null = null;
 
     const getSavedValues = () => {
-        let data: TFormData | null = null;
-        try {
-            data = JSON.parse(localStorage.getItem('qs-fields') ?? '{}');
-        } catch {
-            data = null;
-        }
-        return data;
+        return getSavedQuickStrategyValues();
     };
 
     const getInitialValue = () => {
@@ -70,6 +65,8 @@ const FormikWrapper: React.FC<TFormikWrapper> = observer(({ children }) => {
             durationtype: data?.durationtype ?? qs_config().QUICK_STRATEGY.DEFAULT.durationtype,
             duration: data?.duration ?? '1',
             stake: data?.stake ?? '1',
+            higher_barrier_offset: data?.higher_barrier_offset ?? '1',
+            lower_barrier_offset: data?.lower_barrier_offset ?? '-1',
             loss: data?.loss ?? '',
             profit: data?.profit ?? '',
             size: data?.size ?? String(qs_config().QUICK_STRATEGY.DEFAULT.size),
@@ -188,7 +185,7 @@ const FormikWrapper: React.FC<TFormikWrapper> = observer(({ children }) => {
 
     const handleSubmit = (form_data: TFormData) => {
         updateSchema(form_data);
-        localStorage?.setItem('qs-fields', JSON.stringify(form_data));
+        saveQuickStrategyValues(form_data);
         return form_data;
     };
 

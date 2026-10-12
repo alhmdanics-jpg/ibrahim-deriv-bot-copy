@@ -131,7 +131,7 @@ const QuickStrategyForm = observer(() => {
                                 } = field;
                                 const should_enable = shouldEnable(should_have);
                                 const initial_stake = 1;
-                                let min = 1;
+                                let min = field.min ?? 1;
                                 let max;
                                 if (field.name === 'duration' && current_duration_min_max) {
                                     min = current_duration_min_max.min;

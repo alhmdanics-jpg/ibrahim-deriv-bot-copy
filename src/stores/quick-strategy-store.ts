@@ -4,6 +4,7 @@ import { save_types } from '@/external/bot-skeleton/constants/save-type';
 import { addDynamicBlockToDOM } from '@/utils/xml-dom-quick-strategy';
 import { STRATEGIES } from '../pages/bot-builder/quick-strategy/config';
 import { TFormData } from '../pages/bot-builder/quick-strategy/types';
+import { getEffectiveQuickStrategyData, splitSignedBarrierOffset } from './quick-strategy-utils';
 import RootStore from './root-store';
 
 export type TActiveSymbol = {
@@ -39,7 +40,7 @@ interface IQuickStrategyStore {
     setLossThresholdWarningData: (data: TLossThresholdWarningData) => void;
     setFormVisibility: (is_open: boolean) => void;
     setSelectedStrategy: (strategy: string) => void;
-    setValue: (name: string, value: string) => void;
+    setValue: (name: string, value: string | number | boolean) => void;
     onSubmit: (data: TFormData) => void;
     toggleStopBotDialog: () => void;
     setCurrentDurationMinMax: (min: number, max: number) => void;
@@ -145,18 +146,7 @@ export default class QuickStrategyStore implements IQuickStrategyStore {
     onSubmit = async (data: TFormData) => {
         const { contracts_for } = ApiHelpers?.instance ?? {};
         if (!contracts_for) return;
-        const effective_data =
-            this.selected_strategy === 'VIDEO_PAIR'
-                ? {
-                      ...data,
-                      symbol: '1HZ100V',
-                      tradetype: 'higherlower',
-                      type: 'both',
-                      durationtype: 't',
-                      duration: 5,
-                      stake: '5',
-                  }
-                : data;
+        const effective_data = getEffectiveQuickStrategyData(this.selected_strategy, data);
         const market = await contracts_for.getMarketBySymbol(effective_data.symbol);
         const submarket = await contracts_for.getSubmarketBySymbol(effective_data.symbol);
         const trade_type_cat = await contracts_for.getTradeTypeCategoryByTradeType(effective_data.tradetype);
@@ -185,6 +175,11 @@ export default class QuickStrategyStore implements IQuickStrategyStore {
                 el_block.innerHTML = value;
             });
         };
+        const modifyBarrierOffset = (key: string, field_name: string, value: string | number) => {
+            const { magnitude, sign } = splitSignedBarrierOffset(value);
+            modifyValueInputs(key, magnitude);
+            modifyFieldDropdownValues(field_name, sign);
+        };
         const { unit, action, type, growth_rate, ...rest_data } = effective_data;
         const fields_to_update = {
             market,
@@ -201,7 +196,11 @@ export default class QuickStrategyStore implements IQuickStrategyStore {
         Object.keys(fields_to_update).forEach(key => {
             const value = fields_to_update[key as keyof typeof fields_to_update];
 
-            if (!isNaN(value as number) && key !== 'growthrate') {
+            if (key === 'higher_barrier_offset') {
+                modifyBarrierOffset(key, 'BARRIEROFFSETTYPE', value as string | number);
+            } else if (key === 'lower_barrier_offset') {
+                modifyBarrierOffset(key, 'SECONDBARRIEROFFSETTYPE', value as string | number);
+            } else if (!isNaN(value as number) && key !== 'growthrate') {
                 modifyValueInputs(key, value as number);
             } else if (typeof value === 'string') {
                 modifyFieldDropdownValues(key, value);

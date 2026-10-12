@@ -185,6 +185,32 @@ const DURATION = (): TConfigItem => ({
     validation: ['number', 'required', 'min', 'max', 'integer'],
 });
 
+const LABEL_HIGHER_BARRIER_OFFSET = (): TConfigItem => ({
+    type: 'label',
+    label: localize('Higher barrier offset'),
+    description: localize('Enter a positive or negative offset for each Higher contract.'),
+});
+
+const HIGHER_BARRIER_OFFSET = (): TConfigItem => ({
+    type: 'number',
+    name: 'higher_barrier_offset',
+    validation: ['number', 'required'],
+    min: -999999999999,
+});
+
+const LABEL_LOWER_BARRIER_OFFSET = (): TConfigItem => ({
+    type: 'label',
+    label: localize('Lower barrier offset'),
+    description: localize('Enter a positive or negative offset for each Lower contract.'),
+});
+
+const LOWER_BARRIER_OFFSET = (): TConfigItem => ({
+    type: 'number',
+    name: 'lower_barrier_offset',
+    validation: ['number', 'required'],
+    min: -999999999999,
+});
+
 const LABEL_PROFIT = (): TConfigItem => ({
     type: 'label',
     label: localize('Profit threshold'),
@@ -304,13 +330,25 @@ export const STRATEGIES = (): TStrategies => ({
             {
                 type: 'text',
                 content: [
-                    localize('Volatility 100 (1s): one Higher and one Lower contract per pair.'),
-                    localize('Stake: 5 USD per contract. Duration: 5 ticks per contract.'),
-                    localize('Higher and Lower offsets: 1 each.'),
+                    localize('One Higher and one Lower contract per pair. Choose the market, stake, duration, and offsets below.'),
                 ],
             },
         ],
-        fields: [],
+        fields: [
+            [
+                LABEL_SYMBOL(),
+                SYMBOL(),
+                LABEL_STAKE(),
+                STAKE(),
+                LABEL_DURATION(),
+                DURATION_TYPE(),
+                DURATION(),
+                LABEL_HIGHER_BARRIER_OFFSET(),
+                HIGHER_BARRIER_OFFSET(),
+                LABEL_LOWER_BARRIER_OFFSET(),
+                LOWER_BARRIER_OFFSET(),
+            ],
+        ],
     },
     MARTINGALE: {
         name: 'martingale_max-stake',
