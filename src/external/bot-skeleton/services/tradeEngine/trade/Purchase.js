@@ -9,6 +9,12 @@ import {
     pairDiagnostic,
 } from '../utils/broadcast';
 import { doUntilDone, getPairTradeOptionsForContract, getUUID, recoverFromError, tradeOptionToBuy } from '../utils/helpers';
+import {
+    getMinimumPairPayout,
+    isHigherLowerPair,
+    PAIR_MINIMUM_PAYOUT_MULTIPLIER,
+    withValidatedPairProposals,
+} from '../utils/pair-payout-validation';
 import { purchaseSuccessful } from './state/actions';
 import { BEFORE_PURCHASE } from './state/constants';
 
@@ -42,14 +48,16 @@ export default Engine =>
                 this.bothResultProcessed = false;
                 this.bothOpenDispatched = false;
                 this.bothPurchasesSettled = false;
-                contractStatus({ id: 'contract.purchase_sent', data: this.tradeOptions.amount });
+                const is_higher_lower_pair = isHigherLowerPair(contract_types);
+                if (!is_higher_lower_pair) {
+                    contractStatus({ id: 'contract.purchase_sent', data: this.tradeOptions.amount });
+                }
 
                 // Start both requests in this same execution turn; independent API requests
                 // cannot guarantee an identical market entry spot.
                 let purchase_requests;
                 try {
-                    purchase_requests = contract_types.map(type => {
-                        const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
+                    const create_purchase_request = (type, proposal) => {
                         const trade_options = getPairTradeOptionsForContract(this.tradeOptions, type);
                         const trade_option = proposal ? null : tradeOptionToBuy(type, trade_options);
                         const action = () => {
@@ -63,15 +71,46 @@ export default Engine =>
                             }
 
                             return proposal
-                                ? api_base.api.send({ buy: proposal.id, price: proposal.askPrice })
+                                ? api_base.api.send({ buy: proposal.id, price: proposal.ask_price ?? proposal.askPrice })
                                 : api_base.api.send(trade_option);
                         };
 
                         return { type, action };
-                    });
+                    };
+
+                    if (is_higher_lower_pair) {
+                        if (!this.is_proposal_subscription_required) {
+                            const minimum_payout = getMinimumPairPayout(this.tradeOptions?.amount);
+                            const minimum_payout_label = minimum_payout
+                                ? `${minimum_payout} ${this.tradeOptions?.currency || ''}`.trim()
+                                : `${PAIR_MINIMUM_PAYOUT_MULTIPLIER} × the current stake`;
+                            throw new Error(
+                                `Higher/Lower pair rejected: current HIGHER and LOWER quotes are required to verify the minimum payout. Required payout per contract: ${minimum_payout_label}.`
+                            );
+                        }
+
+                        purchase_requests = withValidatedPairProposals(
+                            {
+                                proposals: this.data?.proposals,
+                                purchaseReference: this.getPurchaseReference(),
+                                stake: this.tradeOptions?.amount,
+                                currency: this.tradeOptions?.currency,
+                            },
+                            pair => contract_types.map(type => create_purchase_request(type, pair[type]))
+                        );
+                    } else {
+                        purchase_requests = contract_types.map(type => {
+                            const proposal = this.is_proposal_subscription_required ? this.selectProposal(type) : null;
+                            return create_purchase_request(type, proposal);
+                        });
+                    }
                 } catch (error) {
                     this.$scope?.observer?.emit('Error', error?.error || error);
                     return Promise.reject(error);
+                }
+
+                if (is_higher_lower_pair) {
+                    contractStatus({ id: 'contract.purchase_sent', data: this.tradeOptions.amount });
                 }
 
                 const purchases = purchase_requests.map(({ type, action }) => {
@@ -129,6 +168,9 @@ export default Engine =>
                     this.updateAndReturnTotalRuns(contract_types.length);
                     delayIndex = 0;
                     this.store.dispatch(purchaseSuccessful());
+                    if (is_higher_lower_pair && this.is_proposal_subscription_required) {
+                        this.renewProposalsOnPurchase();
+                    }
                     this.checkBothContracts();
 
                     return successes.map(result => result.value.response);

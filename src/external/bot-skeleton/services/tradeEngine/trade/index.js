@@ -5,6 +5,7 @@ import { createError } from '../../../utils/error';
 import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import { checkBlocksForProposalRequest, doUntilDone } from '../utils/helpers';
+import { requiresProposalForTrade } from '../utils/pair-payout-validation';
 import { expectInitArg } from '../utils/sanitize';
 import { proposalsReady, start } from './state/actions';
 import * as constants from './state/constants';
@@ -161,7 +162,11 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
 
     makeDirectPurchaseDecision() {
         const { has_payout_block, is_basis_payout } = checkBlocksForProposalRequest();
-        this.is_proposal_subscription_required = has_payout_block || is_basis_payout;
+        this.is_proposal_subscription_required = requiresProposalForTrade(
+            this.options?.contractTypes,
+            has_payout_block,
+            is_basis_payout
+        );
 
         if (this.is_proposal_subscription_required) {
             this.makeProposals({ ...this.options, ...this.tradeOptions });
