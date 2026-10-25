@@ -160,13 +160,75 @@ export const getLastDigitForList = (tick, pip_size = 0) => {
     return value[value.length - 1];
 };
 
+const request_types = [
+    'active_symbols',
+    'authorize',
+    'balance',
+    'buy',
+    'cancel',
+    'contracts_for',
+    'forget',
+    'forget_all',
+    'history',
+    'ping',
+    'portfolio',
+    'proposal',
+    'proposal_open_contract',
+    'sell',
+    'statement',
+    'ticks',
+    'ticks_history',
+    'time',
+    'transaction',
+    'trading_times',
+];
+
+const redactSensitiveText = value =>
+    String(value)
+        .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+        .replace(
+            /\b(access[_-]?token|api[_-]?token|refresh[_-]?token|authorization|token|password|secret)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;&}]+)/gi,
+            '$1$2[redacted]'
+        )
+        .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[redacted]')
+        .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+        .slice(0, 400);
+
+export const getRequestErrorDetails = error_obj => {
+    const response_error = error_obj?.error && typeof error_obj.error === 'object' ? error_obj.error : {};
+    const echo_req = error_obj?.echo_req || response_error.echo_req || {};
+    const explicit_message_type = response_error.msg_type || error_obj?.msg_type;
+    const inferred_message_type = request_types.find(type => Object.prototype.hasOwnProperty.call(echo_req, type));
+    const message_type = request_types.includes(explicit_message_type)
+        ? explicit_message_type
+        : inferred_message_type || 'unknown';
+    const code = response_error.code || error_obj?.code || '';
+    const raw_message = response_error.message || error_obj?.message || '';
+    const request_id = Number.isFinite(echo_req?.req_id) ? String(echo_req.req_id) : '';
+
+    return {
+        message_type,
+        code,
+        safe_code: code ? redactSensitiveText(code) : '',
+        message: raw_message ? redactSensitiveText(raw_message) : '',
+        request_id,
+    };
+};
+
 const getBackoffDelayInMs = (error_obj, delay_index) => {
     const base_delay = 2.5;
     const max_delay = 15;
     const next_delay_in_seconds = Math.min(base_delay * delay_index, max_delay);
 
-    const { error = {}, msg_type = '', echo_req = {} } = error_obj;
-    const { code = '', message = '' } = error;
+    const { code, safe_code, message, message_type, request_id } = getRequestErrorDetails(error_obj);
+    const error_details = [
+        request_id && `request ID: ${request_id}`,
+        safe_code && `code: ${safe_code}`,
+        message && `server: ${message}`,
+    ]
+        .filter(Boolean)
+        .join(' | ');
+    const error_details_suffix = error_details ? ` (${error_details})` : '';
     let message_to_print = '';
     const trade_type_block = Blockly.derivWorkspace
         .getAllBlocks(true)
@@ -178,11 +240,12 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
         switch (code) {
             case 'RateLimit':
                 message_to_print = localize(
-                    'You are rate limited for: {{ message_type }}, retrying in {{ delay }}s (ID: {{ request }})',
+                    'You are rate limited for: {{ message_type }}{{ details }}, retrying in {{ delay }}s (ID: {{ request }})',
                     {
-                        message_type: error.msg_type,
+                        message_type,
+                        details: error_details_suffix,
                         delay: next_delay_in_seconds,
-                        request: echo_req?.req_id,
+                        request: request_id || localize('unknown'),
                     }
                 );
 
@@ -208,17 +271,25 @@ const getBackoffDelayInMs = (error_obj, delay_index) => {
                 );
                 break;
             default:
-                message_to_print = localize('Request failed for: {{ message_type }}, retrying in {{ delay }}s', {
-                    message_type: msg_type || localize('unknown'),
-                    delay: next_delay_in_seconds,
-                });
+                message_to_print = localize(
+                    'Request failed for: {{ message_type }}{{ details }}, retrying in {{ delay }}s',
+                    {
+                        message_type,
+                        details: error_details_suffix,
+                        delay: next_delay_in_seconds,
+                    }
+                );
                 break;
         }
     } else {
-        message_to_print = localize('Request failed for: {{ message_type }}, retrying in {{ delay }}s', {
-            message_type: msg_type || localize('unknown'),
-            delay: next_delay_in_seconds,
-        });
+        message_to_print = localize(
+            'Request failed for: {{ message_type }}{{ details }}, retrying in {{ delay }}s',
+            {
+                message_type,
+                details: error_details_suffix,
+                delay: next_delay_in_seconds,
+            }
+        );
     }
 
     logError(message_to_print);

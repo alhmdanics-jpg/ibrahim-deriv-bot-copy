@@ -9,7 +9,13 @@ jest.mock('@deriv-com/translations', () => ({ localize: value => value }));
 jest.mock('@/external/bot-skeleton/utils/observer', () => ({ observer: { emit: jest.fn() } }));
 jest.mock('../broadcast', () => ({ error: jest.fn() }));
 
-import { formatBarrierOffset, getPairTradeOptionsForContract, tradeOptionToBuy, tradeOptionToProposal } from '../helpers';
+import {
+    formatBarrierOffset,
+    getPairTradeOptionsForContract,
+    getRequestErrorDetails,
+    tradeOptionToBuy,
+    tradeOptionToProposal,
+} from '../helpers';
 
 describe('Higher/Lower pair barrier request mapping', () => {
     const trade_options = {
@@ -75,5 +81,52 @@ describe('Higher/Lower pair barrier request mapping', () => {
                 expect.objectContaining({ contract_type: 'LOWER', barrier: '-0.35' }),
             ])
         );
+    });
+});
+
+describe('proposal request error details', () => {
+    it('identifies the request and preserves the server error code and message', () => {
+        expect(
+            getRequestErrorDetails({
+                error: { code: 'InvalidContractProposal', message: 'Barrier is invalid' },
+                echo_req: { proposal: 1, req_id: 42 },
+            })
+        ).toEqual({
+            message_type: 'proposal',
+            code: 'InvalidContractProposal',
+            safe_code: 'InvalidContractProposal',
+            message: 'Barrier is invalid',
+            request_id: '42',
+        });
+    });
+
+    it('redacts credential values and does not expose request payload fields', () => {
+        const details = getRequestErrorDetails({
+            error: {
+                code: 'RequestFailed',
+                message: 'Invalid token=secret-value Bearer bearer-value',
+            },
+            echo_req: {
+                proposal: 1,
+                token: 'request-secret',
+            },
+        });
+
+        expect(details).toEqual({
+            message_type: 'proposal',
+            code: 'RequestFailed',
+            safe_code: 'RequestFailed',
+            message: 'Invalid token=[redacted] Bearer [redacted]',
+            request_id: '',
+        });
+        expect(JSON.stringify(details)).not.toContain('request-secret');
+    });
+
+    it('uses unknown only when neither the response nor echo request identifies a known type', () => {
+        expect(getRequestErrorDetails({ error: { code: 'RequestFailed', message: 'Failed' } })).toMatchObject({
+            message_type: 'unknown',
+            code: 'RequestFailed',
+            message: 'Failed',
+        });
     });
 });
