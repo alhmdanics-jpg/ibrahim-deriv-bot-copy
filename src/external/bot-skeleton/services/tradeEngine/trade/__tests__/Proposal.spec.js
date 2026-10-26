@@ -52,6 +52,13 @@ const makeProposalResponse = request => ({
     },
 });
 
+const makeWrappedProposalResponse = request => {
+    const response = makeProposalResponse(request);
+    const { echo_req, msg_type, proposal } = response;
+
+    return { data: { msg_type, proposal }, echo_req };
+};
+
 beforeEach(() => {
     api_base.api.send.mockReset();
     doUntilDone.mockReset();
@@ -113,12 +120,26 @@ describe('Higher/Lower pair proposal readiness', () => {
         expect(engine.store.dispatch).not.toHaveBeenCalled();
     });
 
-    it('reads passthrough from echo_req and marks both current quotes ready', async () => {
+    it('marks both current quotes ready when response fields are at the top level', async () => {
         const engine = createPairEngine();
-        api_base.api.send.mockImplementation(request => {
-            const response = makeProposalResponse(request);
-            return Promise.resolve(request.contract_type === 'HIGHER' ? { data: response } : response);
-        });
+        api_base.api.send.mockImplementation(request => Promise.resolve(makeProposalResponse(request)));
+
+        await engine.requestProposals();
+        await Promise.resolve();
+
+        expect(engine.data.proposals).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ contract_type: 'HIGHER', purchase_reference: 'current-reference' }),
+                expect.objectContaining({ contract_type: 'LOWER', purchase_reference: 'current-reference' }),
+            ])
+        );
+        expect(engine.store.dispatch).toHaveBeenCalledTimes(1);
+        expect(engine.store.dispatch).toHaveBeenCalledWith(proposalsReady());
+    });
+
+    it('preserves the outer echo_req when proposal fields are inside response.data', async () => {
+        const engine = createPairEngine();
+        api_base.api.send.mockImplementation(request => Promise.resolve(makeWrappedProposalResponse(request)));
 
         await engine.requestProposals();
         await Promise.resolve();
@@ -177,11 +198,15 @@ describe('Higher/Lower pair proposal readiness', () => {
         expect(engine.store.dispatch).not.toHaveBeenCalledWith(proposalsReady());
     });
 
-    it('rejects a proposal response tied to a different purchase reference', async () => {
+    it('rejects conflicting references even when top-level passthrough matches', async () => {
         const engine = createPairEngine();
         api_base.api.send.mockImplementation(request => {
             const response = makeProposalResponse(request);
             if (request.contract_type === 'LOWER') {
+                response.passthrough = {
+                    contract_type: 'LOWER',
+                    purchase_reference: 'current-reference',
+                };
                 response.echo_req.passthrough.purchase_reference = 'stale-reference';
             }
             return Promise.resolve(response);

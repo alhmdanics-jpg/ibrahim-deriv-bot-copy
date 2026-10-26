@@ -6,10 +6,24 @@ import { clearProposals, proposalsReady } from './state/actions';
 
 const PAIR_PROPOSAL_REQUEST_TIMEOUT_MS = 15000;
 
-const getResponseData = response => response?.data ?? response;
+const getResponseData = response => {
+    if (!response?.data || typeof response.data !== 'object') return response;
+
+    return {
+        ...response,
+        ...response.data,
+        echo_req: response.data.echo_req ?? response.echo_req,
+        passthrough: response.data.passthrough ?? response.passthrough,
+    };
+};
 
 const getResponsePassthrough = response =>
     response?.passthrough ?? response?.echo_req?.passthrough;
+
+const getResponsePassthroughs = response =>
+    [response?.passthrough, response?.echo_req?.passthrough].filter(
+        passthrough => passthrough && typeof passthrough === 'object'
+    );
 
 export default Engine =>
     class Proposal extends Engine {
@@ -159,7 +173,7 @@ export default Engine =>
         validatePairProposalResponse(response, template) {
             const { contract_type, passthrough } = template;
             const echoed_request = response?.echo_req;
-            const echoed_passthrough = getResponsePassthrough(response);
+            const echoed_passthroughs = getResponsePassthroughs(response);
             const current_purchase_reference = this.getPurchaseReference();
 
             if (response?.msg_type !== 'proposal' || !response?.proposal?.id) {
@@ -169,9 +183,13 @@ export default Engine =>
             if (
                 echoed_request?.proposal !== 1 ||
                 echoed_request?.contract_type !== contract_type ||
-                echoed_passthrough?.contract_type !== contract_type ||
-                echoed_passthrough?.purchase_reference !== passthrough?.purchase_reference ||
-                echoed_passthrough?.purchase_reference !== current_purchase_reference
+                echoed_passthroughs.length === 0 ||
+                echoed_passthroughs.some(
+                    echoed_passthrough =>
+                        echoed_passthrough.contract_type !== contract_type ||
+                        echoed_passthrough.purchase_reference !== passthrough?.purchase_reference ||
+                        echoed_passthrough.purchase_reference !== current_purchase_reference
+                )
             ) {
                 throw new Error(
                     `Deriv returned a ${contract_type} proposal that does not match the current purchase reference.`
