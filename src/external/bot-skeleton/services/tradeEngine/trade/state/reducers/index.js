@@ -8,6 +8,11 @@ const initialState = {
 // eslint-disable-next-line default-param-last
 const signal = (state = initialState, action) => {
     switch (action.type) {
+        case constants.STOP:
+            return {
+                scope: constants.STOP,
+                proposalsReady: false,
+            };
         case constants.START:
             return {
                 scope: constants.BEFORE_PURCHASE,

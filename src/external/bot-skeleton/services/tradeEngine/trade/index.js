@@ -47,6 +47,12 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
         const unsubscribe = store.subscribe(() => {
             const newState = store.getState();
 
+            if (newState.scope === stopScope) {
+                unsubscribe();
+                resolve(false);
+                return;
+            }
+
             if (newState.newTick === prevTick) return;
             prevTick = newState.newTick;
 
@@ -55,10 +61,6 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
                 resolve(true);
             }
 
-            if (newState.scope === stopScope) {
-                unsubscribe();
-                resolve(false);
-            }
         });
     });
 };

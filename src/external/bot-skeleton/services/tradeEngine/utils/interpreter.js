@@ -5,6 +5,7 @@ import { unrecoverable_errors } from '../../../constants/messages';
 import { observer as globalObserver } from '../../../utils/observer';
 import { api_base } from '../../api/api-base';
 import Interface from '../Interface';
+import { STOP } from '../trade/state/constants';
 import { createScope } from './cliTools';
 
 JSInterpreter.prototype.takeStateSnapshot = function () {
@@ -204,15 +205,18 @@ const Interpreter = () => {
             try {
                 $scope.stopped = true;
                 $scope.is_error_triggered = false;
+                bot.tradeEngine.cancelPendingProposalRequests?.();
+                bot.tradeEngine.store?.dispatch({ type: STOP });
                 globalObserver.emit('bot.stop');
                 const { ticksService } = $scope;
                 // Unsubscribe previous ticks_history subscription
                 // Unsubscribe the subscriptions from Proposal, Balance and OpenContract
                 api_base.clearSubscriptions();
 
-                ticksService.unsubscribeFromTicksService().then(() => {
-                    resolve();
-                });
+                Promise.resolve()
+                    .then(() => ticksService.unsubscribeFromTicksService())
+                    .catch(() => {});
+                resolve();
             } catch (error) {
                 reject(error);
             }

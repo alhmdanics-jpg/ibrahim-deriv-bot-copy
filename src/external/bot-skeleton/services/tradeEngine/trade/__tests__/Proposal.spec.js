@@ -154,6 +154,20 @@ describe('Higher/Lower pair proposal readiness', () => {
         expect(engine.store.dispatch).toHaveBeenCalledWith(proposalsReady());
     });
 
+    it('does not store pair proposals from the message observer before request validation', () => {
+        const engine = createPairEngine();
+        engine.observeProposals();
+        const listener = api_base.subscribeToMessages.mock.calls[0][0];
+
+        listener({
+            data: makeWrappedProposalResponse(engine.proposal_templates[0]).data,
+            echo_req: { passthrough: { contract_type: 'HIGHER', purchase_reference: 'stale-reference' } },
+        });
+
+        expect(engine.data.proposals).toEqual([]);
+        expect(engine.store.dispatch).not.toHaveBeenCalledWith(proposalsReady());
+    });
+
     it('reports a resolved API error and does not mark the pair ready', async () => {
         const engine = createPairEngine();
         api_base.api.send.mockImplementation(request => {
@@ -216,9 +230,48 @@ describe('Higher/Lower pair proposal readiness', () => {
         await Promise.resolve();
 
         expect(engine.$scope.observer.emit).toHaveBeenCalledTimes(1);
-        expect(engine.$scope.observer.emit.mock.calls[0][1].message).toContain(
-            'does not match the current purchase reference'
-        );
+        const error_message = engine.$scope.observer.emit.mock.calls[0][1].message;
+        expect(error_message).toContain('does not match the current purchase reference');
+        expect(error_message).toContain('current_purchase_reference');
+        expect(error_message).toContain('stale-reference');
+        expect(error_message).not.toContain('token');
+        expect(engine.store.dispatch).not.toHaveBeenCalledWith(proposalsReady());
+    });
+
+    it('reports one pair failure and cancels its pending sibling without retrying', async () => {
+        const engine = createPairEngine();
+        api_base.api.send.mockImplementation(request => {
+            if (request.contract_type === 'HIGHER') {
+                return Promise.resolve({
+                    error: { code: 'InternalError', message: 'internal server error' },
+                    echo_req: request,
+                    msg_type: 'proposal',
+                });
+            }
+            return new Promise(() => {});
+        });
+
+        await engine.requestProposals();
+
+        expect(api_base.api.send).toHaveBeenCalledTimes(2);
+        expect(doUntilDone).not.toHaveBeenCalled();
+        expect(engine.$scope.observer.emit).toHaveBeenCalledTimes(1);
+        expect(engine.$scope.observer.emit.mock.calls[0][1].code).toBe('PairProposalFailure');
+        expect(engine.store.dispatch).not.toHaveBeenCalledWith(proposalsReady());
+    });
+
+    it('cancels outstanding pair quotes when Run stops waiting for API responses', async () => {
+        const engine = createPairEngine();
+        api_base.api.send.mockImplementation(() => new Promise(() => {}));
+
+        const request_promise = engine.requestProposals();
+        await Promise.resolve();
+        engine.cancelPendingProposalRequests();
+        await request_promise;
+
+        expect(api_base.api.send).toHaveBeenCalledTimes(2);
+        expect(engine.$scope.observer.emit).not.toHaveBeenCalled();
+        expect(engine.data.proposals).toEqual([]);
         expect(engine.store.dispatch).not.toHaveBeenCalledWith(proposalsReady());
     });
 

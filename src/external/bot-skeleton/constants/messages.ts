@@ -18,6 +18,7 @@ export const unrecoverable_errors = [
     'InputValidationFailed',
     'ClientUnwelcome',
     'PriceMoved',
+    'PairProposalFailure',
 ];
 
 export enum MessageTypes {
